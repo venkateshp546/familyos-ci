@@ -1,0 +1,143 @@
+name: FamilyOS iOS CI Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from FamilyOS private repository'
+        required: true
+        default: 'claude/familyos-forensic-audit-ik0uoc'
+        type: string
+      sdk:
+        description: 'Target SDK (iphoneos for physical iPhone testing via Sideloadly/AltStore, iphonesimulator for Simulator)'
+        required: true
+        default: 'iphoneos'
+        type: choice
+        options:
+          - iphoneos
+          - iphonesimulator
+
+jobs:
+  build-ios:
+    name: Build iOS (${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }})
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Private FamilyOS Repository
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/FamilyOS
+          ssh-key: ${{ secrets.PRIVATE_SSH_KEY }}
+          ref: ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared contracts & types
+        run: |
+          pnpm --filter @familyos/core-contracts build
+          pnpm --filter @familyos/shared-types build
+
+      - name: Ensure mobile .env exists
+        run: |
+          if [ ! -f apps/mobile/.env ]; then
+            echo "Copying .env.example to apps/mobile/.env"
+            cp apps/mobile/.env.example apps/mobile/.env
+          fi
+
+      - name: Setup Ruby and Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: apps/mobile
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile/ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('apps/mobile/ios/Podfile') }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-${{ hashFiles('apps/mobile/ios/Podfile') }}-
+            ${{ runner.os }}-pods-
+
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        env:
+          USE_FRAMEWORKS: static
+        run: |
+          bundle exec pod install
+
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile/build/derivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('apps/mobile/ios/Podfile') }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-${{ hashFiles('apps/mobile/ios/Podfile') }}-
+            ${{ runner.os }}-deriveddata-
+
+      - name: Build iOS App (${{ inputs.sdk || 'iphoneos' }})
+        working-directory: apps/mobile
+        run: |
+          TARGET_SDK="${{ inputs.sdk || 'iphoneos' }}"
+          echo "Building for SDK: $TARGET_SDK"
+
+          xcodebuild build \
+            -workspace ios/FamilyOSMobile.xcworkspace \
+            -scheme FamilyOSMobile \
+            -configuration Release \
+            -sdk "$TARGET_SDK" \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/derivedData \
+            -parallelizeTargets \
+            -jobs $(sysctl -n hw.ncpu) \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
+            ONLY_ACTIVE_ARCH=YES \
+            MARKETING_VERSION="1.0.3" \
+            CURRENT_PROJECT_VERSION="1" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            PROVISIONING_PROFILE_UUID="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package IPA for Physical Device Sideloading
+        if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
+        working-directory: apps/mobile
+        run: |
+          echo "Packaging FamilyOSMobile.app into FamilyOSMobile.ipa..."
+          rm -rf build/Payload build/FamilyOSMobile.ipa
+          mkdir -p build/Payload
+          cp -R build/derivedData/Build/Products/Release-iphoneos/FamilyOSMobile.app build/Payload/
+          cd build
+          zip -r -q FamilyOSMobile.ipa Payload
+          echo "FamilyOSMobile.ipa packaged successfully."
+
+      - name: Upload IPA Artifact (for Sideloadly / AltStore / Physical Device)
+        if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FamilyOSMobile-IPA
+          path: apps/mobile/build/FamilyOSMobile.ipa
+          retention-days: 14
+
+      - name: Upload App Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FamilyOSMobile-App-Bundle-${{ inputs.sdk || 'iphoneos' }}
+          path: apps/mobile/build/derivedData/Build/Products/Release-${{ inputs.sdk || 'iphoneos' }}/FamilyOSMobile.app
+          retention-days: 14
