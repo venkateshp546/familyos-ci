@@ -1,0 +1,32 @@
+name: Cleanup CI Logs
+
+on:
+  workflow_run:
+    workflows:
+      - "FamilyOS iOS CI Runner"
+      - "FamilyOS Android & Validation CI"
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Completed Workflow Run
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          TARGET_RUN_ID="${{ github.event.workflow_run.id }}"
+          if [ -n "$TARGET_RUN_ID" ]; then
+            echo "Deleting completed build run: $TARGET_RUN_ID"
+            gh run delete "$TARGET_RUN_ID" -R venkateshp546/familyos-ci || true
+          fi
+
+          echo "Pruning older completed runs..."
+          gh run list -R venkateshp546/familyos-ci --limit 30 --json databaseId,status -q '.[] | select(.status=="completed") | .databaseId' | while read -r run_id; do
+            if [ -n "$run_id" ] && [ "$run_id" != "$GITHUB_RUN_ID" ]; then
+              echo "Pruning run $run_id"
+              gh run delete "$run_id" -R venkateshp546/familyos-ci || true
+            fi
+          done
