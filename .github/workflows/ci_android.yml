@@ -1,0 +1,116 @@
+name: FamilyOS Android & Validation CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from FamilyOS private repository'
+        required: true
+        default: 'claude/familyos-forensic-audit-ik0uoc'
+        type: string
+      build_android:
+        description: 'Build Android APK'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  validate-and-build:
+    name: Verify & Build (${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Private FamilyOS Repository
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/FamilyOS
+          ssh-key: ${{ secrets.PRIVATE_SSH_KEY }}
+          ref: ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }}
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared contracts & types
+        run: |
+          pnpm --filter @familyos/core-contracts build
+          pnpm --filter @familyos/shared-types build
+
+      - name: Contracts tests
+        run: pnpm --filter @familyos/core-contracts test
+
+      - name: Mobile typecheck
+        run: pnpm --filter @familyos/mobile exec tsc --noEmit -p tsconfig.json
+
+      - name: Mobile tests
+        run: pnpm --filter @familyos/mobile test
+
+      - name: Lint
+        run: pnpm exec eslint apps packages --max-warnings 0
+
+      - name: Cloud typecheck
+        run: pnpm --filter @familyos/cloud exec tsc --noEmit -p tsconfig.json
+
+      - name: Cloud tests
+        run: pnpm --filter @familyos/cloud test
+
+      - name: Check architecture boundaries
+        shell: bash
+        run: |
+          leaks=$(grep -rn "services/cloud" apps/mobile/src \
+            --include=*.ts --include=*.tsx \
+            | grep -v "src/services/cloud/" \
+            | grep -v "src/services/providers.ts" || true)
+          if [ -n "$leaks" ]; then
+            echo "A provider implementation is imported outside providers.ts:"
+            echo "$leaks"
+            exit 1
+          fi
+
+      - name: Android Build
+        if: ${{ inputs.build_android }}
+        run: |
+          cd apps/mobile/android
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Publish Android APK to Private FamilyOS Releases
+        if: ${{ inputs.build_android }}
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          TAG_NAME="android-latest"
+          echo "Publishing APK directly to private FamilyOS repository release: $TAG_NAME"
+          gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y || true
+          gh release create "$TAG_NAME" apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            -R venkateshp546/FamilyOS \
+            --title "FamilyOS Android Latest Build" \
+            --notes "Automated build of branch ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" \
+            --prerelease
+
+      - name: Clean Public CI Run Logs
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          echo "Pruning older public workflow runs in familyos-ci..."
+          gh run list -R venkateshp546/familyos-ci --limit 50 --json databaseId -q '.[].databaseId' | while read -r run_id; do
+            if [ -n "$run_id" ] && [ "$run_id" != "$GITHUB_RUN_ID" ]; then
+              gh run delete "$run_id" -R venkateshp546/familyos-ci || true
+            fi
+          done

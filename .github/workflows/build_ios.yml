@@ -127,7 +127,7 @@ jobs:
           zip -r -q FamilyOSMobile.ipa Payload
           echo "FamilyOSMobile.ipa packaged successfully."
 
-      - name: Upload IPA Artifact (for Sideloadly / AltStore / Physical Device)
+      - name: Upload IPA Artifact
         if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
         uses: actions/upload-artifact@v4
         with:
@@ -135,9 +135,29 @@ jobs:
           path: apps/mobile/build/FamilyOSMobile.ipa
           retention-days: 14
 
-      - name: Upload App Bundle Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FamilyOSMobile-App-Bundle-${{ inputs.sdk || 'iphoneos' }}
-          path: apps/mobile/build/derivedData/Build/Products/Release-${{ inputs.sdk || 'iphoneos' }}/FamilyOSMobile.app
-          retention-days: 14
+      - name: Publish Release to Private FamilyOS Repository
+        if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          TAG_NAME="ios-latest"
+          echo "Publishing IPA directly to private FamilyOS repository release: $TAG_NAME"
+          gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y || true
+          gh release create "$TAG_NAME" apps/mobile/build/FamilyOSMobile.ipa \
+            -R venkateshp546/FamilyOS \
+            --title "FamilyOS iOS Latest Build" \
+            --notes "Automated build of branch ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" \
+            --prerelease
+          echo "Artifact uploaded to private repo release successfully."
+
+      - name: Clean Public CI Run Logs
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          echo "Pruning older public workflow runs in familyos-ci..."
+          gh run list -R venkateshp546/familyos-ci --limit 50 --json databaseId -q '.[].databaseId' | while read -r run_id; do
+            if [ -n "$run_id" ] && [ "$run_id" != "$GITHUB_RUN_ID" ]; then
+              gh run delete "$run_id" -R venkateshp546/familyos-ci || true
+            fi
+          done
