@@ -84,13 +84,14 @@ jobs:
           fi
 
       - name: Android Build
-        if: ${{ inputs.build_android }}
+        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
         run: |
           cd apps/mobile/android
+          chmod +x gradlew
           ./gradlew --no-daemon assembleDebug
 
       - name: Publish Android APK to Private FamilyOS Releases
-        if: ${{ inputs.build_android }}
+        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
