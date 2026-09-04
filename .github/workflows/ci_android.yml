@@ -97,9 +97,10 @@ jobs:
         run: |
           TAG_NAME="android-latest"
           echo "Publishing APK directly to private FamilyOS repository release: $TAG_NAME"
-          gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y || true
+          gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y --cleanup-tag || true
           gh release create "$TAG_NAME" apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
             -R venkateshp546/FamilyOS \
+            --target "${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }}" \
             --title "FamilyOS Android Latest Build" \
             --notes "Automated build of branch ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" \
             --latest

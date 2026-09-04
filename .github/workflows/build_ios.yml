@@ -142,9 +142,10 @@ jobs:
         run: |
           TAG_NAME="ios-latest"
           echo "Publishing IPA directly to private FamilyOS repository release: $TAG_NAME"
-          gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y || true
+          gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y --cleanup-tag || true
           gh release create "$TAG_NAME" apps/mobile/build/FamilyOSMobile.ipa \
             -R venkateshp546/FamilyOS \
+            --target "${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }}" \
             --title "FamilyOS iOS Latest Build" \
             --notes "Automated build of branch ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" \
             --latest
