@@ -102,7 +102,7 @@ jobs:
             -R venkateshp546/FamilyOS \
             --title "FamilyOS Android Latest Build" \
             --notes "Automated build of branch ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" \
-            --prerelease
+            --latest
 
       - name: Clean Public CI Run Logs
         if: always()
