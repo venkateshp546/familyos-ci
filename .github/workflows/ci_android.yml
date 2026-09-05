@@ -6,7 +6,7 @@ on:
       branch:
         description: 'Branch to build from FamilyOS private repository'
         required: true
-        default: 'claude/familyos-forensic-audit-ik0uoc'
+        default: 'master'
         type: string
       build_android:
         description: 'Build Android APK'
@@ -16,7 +16,7 @@ on:
 
 jobs:
   validate-and-build:
-    name: Verify & Build (${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }})
+    name: Verify & Build (${{ inputs.branch || 'master' }})
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +25,7 @@ jobs:
         with:
           repository: venkateshp546/FamilyOS
           ssh-key: ${{ secrets.PRIVATE_SSH_KEY }}
-          ref: ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }}
+          ref: ${{ inputs.branch || 'master' }}
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -47,10 +47,9 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build shared contracts & types
+      - name: Build shared contracts
         run: |
           pnpm --filter @familyos/core-contracts build
-          pnpm --filter @familyos/shared-types build
 
       - name: Contracts tests
         run: pnpm --filter @familyos/core-contracts test
