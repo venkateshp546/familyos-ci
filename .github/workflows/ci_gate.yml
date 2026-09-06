@@ -1,0 +1,88 @@
+name: FamilyOS Verification & CI Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to verify from FamilyOS repository'
+        required: true
+        default: 'master'
+        type: string
+  repository_dispatch:
+    types: [familyos-push, verify]
+  schedule:
+    # Recurring safety check every 6 hours
+    - cron: '0 */6 * * *'
+
+jobs:
+  ci-gate:
+    name: Verification Gate (${{ inputs.branch || github.event.client_payload.branch || 'master' }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Private FamilyOS Repository
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/FamilyOS
+          ssh-key: ${{ secrets.PRIVATE_SSH_KEY }}
+          ref: ${{ inputs.branch || github.event.client_payload.branch || 'master' }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared contracts
+        run: pnpm --filter @familyos/core-contracts build
+
+      - name: Contracts tests
+        run: pnpm --filter @familyos/core-contracts test
+
+      - name: Mobile typecheck
+        run: pnpm --filter @familyos/mobile exec tsc --noEmit -p tsconfig.json
+
+      - name: Mobile tests
+        run: pnpm --filter @familyos/mobile test
+
+      - name: Lint
+        run: pnpm exec eslint apps packages --max-warnings 0
+
+      - name: Cloud typecheck
+        run: pnpm --filter @familyos/cloud exec tsc --noEmit -p tsconfig.json
+
+      - name: Cloud tests
+        run: pnpm --filter @familyos/cloud test
+
+      - name: Check architecture boundaries
+        shell: bash
+        run: |
+          leaks=$(grep -rn "services/cloud" apps/mobile/src \
+            --include=*.ts --include=*.tsx \
+            | grep -v "src/services/cloud/" \
+            | grep -v "src/services/providers.ts" || true)
+          if [ -n "$leaks" ]; then
+            echo "A provider implementation is imported outside providers.ts:"
+            echo "$leaks"
+            exit 1
+          fi
+
+      - name: Clean Public CI Run Logs
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          echo "Pruning older public workflow runs in familyos-ci..."
+          gh run list -R venkateshp546/familyos-ci --limit 50 --json databaseId -q '.[].databaseId' | while read -r run_id; do
+            if [ -n "$run_id" ] && [ "$run_id" != "$GITHUB_RUN_ID" ]; then
+              gh run delete "$run_id" -R venkateshp546/familyos-ci || true
+            fi
+          done
