@@ -50,10 +50,13 @@ jobs:
 
       - name: Ensure mobile .env exists
         run: |
-          if [ ! -f apps/mobile/.env ]; then
-            echo "Copying .env.example to apps/mobile/.env"
-            cp apps/mobile/.env.example apps/mobile/.env
-          fi
+          cat << 'EOF' > apps/mobile/.env
+          FAMILYOS_CLOUD_URL=https://familyos-coordination.venkatesh546.workers.dev
+          GOOGLE_WEB_CLIENT_ID=766760566795-4tj4rtag8rti206nd2vfvek3uu8aqhfn.apps.googleusercontent.com
+          GOOGLE_IOS_CLIENT_ID=766760566795-34ab3sk9ibq4nkc2gj2qomm41i91o5n7.apps.googleusercontent.com
+          APPLE_BUNDLE_ID=com.vtsapps.familyos
+          EOF
+
 
       - name: Setup Ruby and Bundler
         uses: ruby/setup-ruby@v1
