@@ -74,15 +74,3 @@ jobs:
             echo "$leaks"
             exit 1
           fi
-
-      - name: Clean Public CI Run Logs
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
-        run: |
-          echo "Pruning older public workflow runs in familyos-ci..."
-          gh run list -R venkateshp546/familyos-ci --limit 50 --json databaseId -q '.[].databaseId' | while read -r run_id; do
-            if [ -n "$run_id" ] && [ "$run_id" != "$GITHUB_RUN_ID" ]; then
-              gh run delete "$run_id" -R venkateshp546/familyos-ci || true
-            fi
-          done
