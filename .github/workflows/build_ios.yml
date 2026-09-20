@@ -49,12 +49,17 @@ jobs:
           pnpm --filter @familyos/core-contracts build
 
       - name: Ensure mobile .env exists
+        env:
+          TDLIB_API_ID: ${{ secrets.TDLIB_API_ID }}
+          TDLIB_API_HASH: ${{ secrets.TDLIB_API_HASH }}
         run: |
-          cat << 'EOF' > apps/mobile/.env
+          cat << EOF > apps/mobile/.env
           FAMILYOS_CLOUD_URL=https://familyos-coordination.venkatesh546.workers.dev
           GOOGLE_WEB_CLIENT_ID=766760566795-4tj4rtag8rti206nd2vfvek3uu8aqhfn.apps.googleusercontent.com
           GOOGLE_IOS_CLIENT_ID=766760566795-34ab3sk9ibq4nkc2gj2qomm41i91o5n7.apps.googleusercontent.com
           APPLE_BUNDLE_ID=com.vtsapps.familyos
+          TDLIB_API_ID=${TDLIB_API_ID}
+          TDLIB_API_HASH=${TDLIB_API_HASH}
           EOF
 
 
