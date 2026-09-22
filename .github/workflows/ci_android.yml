@@ -16,7 +16,7 @@ on:
       emulator_e2e:
         description: 'Boot the built APK on a real accelerated emulator and smoke-test it'
         required: true
-        default: true
+        default: false
         type: boolean
 
 jobs:
@@ -102,6 +102,9 @@ jobs:
       # than a scripted user-flow E2E suite - this repo has no Detox/Maestro
       # setup yet, and a real crash-on-launch signal is the highest-value
       # thing to add first. A scripted flow suite is a follow-up, not this.
+      # Off by default (emulator_e2e defaults to false) - real-device
+      # testing is being done from a local session instead; pass
+      # emulator_e2e: true on workflow_dispatch to run it again.
       #
       # NOTE: reactivecircus/android-emulator-runner's `script:` executes
       # each line below as its OWN shell invocation (confirmed from real
