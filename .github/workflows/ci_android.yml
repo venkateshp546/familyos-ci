@@ -119,19 +119,24 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            APK=$(find apps/mobile/android/app/build/outputs/apk/debug -name '*.apk' | head -n1)
+            APK=$(find "$GITHUB_WORKSPACE/apps/mobile/android" -name '*.apk' -path '*debug*' | head -n1)
+            if [ -z "$APK" ]; then
+              echo "No debug APK found under $GITHUB_WORKSPACE/apps/mobile/android - listing outputs dir:"
+              find "$GITHUB_WORKSPACE/apps/mobile/android/app/build/outputs" -maxdepth 4 2>&1 || echo "(outputs dir does not exist)"
+              exit 1
+            fi
             echo "Installing $APK"
             adb install -r "$APK"
             adb logcat -c
             adb shell am start -n com.vtsapps.familyos/.MainActivity
             echo "Waiting for the app to settle..."
             sleep 20
-            mkdir -p e2e-artifacts
-            adb exec-out screencap -p > e2e-artifacts/launch-screenshot.png
-            adb logcat -d > e2e-artifacts/logcat.txt
-            if grep -q "FATAL EXCEPTION" e2e-artifacts/logcat.txt || grep -q "AndroidRuntime: FATAL" e2e-artifacts/logcat.txt; then
+            mkdir -p "$GITHUB_WORKSPACE/e2e-artifacts"
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/e2e-artifacts/launch-screenshot.png"
+            adb logcat -d > "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt"
+            if grep -q "FATAL EXCEPTION" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt" || grep -q "AndroidRuntime: FATAL" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt"; then
               echo "App crashed on launch - see e2e-artifacts/logcat.txt"
-              grep -A 30 "FATAL EXCEPTION" e2e-artifacts/logcat.txt || true
+              grep -A 30 "FATAL EXCEPTION" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt" || true
               exit 1
             fi
             RUNNING=$(adb shell "pidof com.vtsapps.familyos" || true)
