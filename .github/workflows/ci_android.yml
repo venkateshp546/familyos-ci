@@ -102,6 +102,15 @@ jobs:
       # than a scripted user-flow E2E suite - this repo has no Detox/Maestro
       # setup yet, and a real crash-on-launch signal is the highest-value
       # thing to add first. A scripted flow suite is a follow-up, not this.
+      #
+      # NOTE: reactivecircus/android-emulator-runner's `script:` executes
+      # each line below as its OWN shell invocation (confirmed from real
+      # run logs - variable assignments persist across lines via a sourced
+      # env, but a control-flow keyword like `if`/`fi` split across two
+      # lines hits an unexpected-EOF syntax error because each line is fed
+      # to a separate `sh -c`). Every conditional here is therefore written
+      # as a single self-contained line using `&&`/`{ ; }`, never `if`/`fi`
+      # spanning multiple lines.
       - name: Enable KVM group perms for the emulator
         if: ${{ (inputs.build_android == true || inputs.build_android == 'true') && (inputs.emulator_e2e == true || inputs.emulator_e2e == 'true') }}
         run: |
@@ -120,11 +129,7 @@ jobs:
           disable-animations: true
           script: |
             APK=$(find "$GITHUB_WORKSPACE/apps/mobile/android" -name '*.apk' -path '*debug*' | head -n1)
-            if [ -z "$APK" ]; then
-              echo "No debug APK found under $GITHUB_WORKSPACE/apps/mobile/android - listing outputs dir:"
-              find "$GITHUB_WORKSPACE/apps/mobile/android/app/build/outputs" -maxdepth 4 2>&1 || echo "(outputs dir does not exist)"
-              exit 1
-            fi
+            [ -z "$APK" ] && { echo "No debug APK found under $GITHUB_WORKSPACE/apps/mobile/android - listing outputs dir:"; find "$GITHUB_WORKSPACE/apps/mobile/android/app/build/outputs" -maxdepth 4 2>&1 || echo "(outputs dir does not exist)"; exit 1; }
             echo "Installing $APK"
             adb install -r "$APK"
             adb logcat -c
@@ -134,16 +139,9 @@ jobs:
             mkdir -p "$GITHUB_WORKSPACE/e2e-artifacts"
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/e2e-artifacts/launch-screenshot.png"
             adb logcat -d > "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt"
-            if grep -q "FATAL EXCEPTION" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt" || grep -q "AndroidRuntime: FATAL" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt"; then
-              echo "App crashed on launch - see e2e-artifacts/logcat.txt"
-              grep -A 30 "FATAL EXCEPTION" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt" || true
-              exit 1
-            fi
+            (grep -q "FATAL EXCEPTION" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt" || grep -q "AndroidRuntime: FATAL" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt") && { echo "App crashed on launch - see e2e-artifacts/logcat.txt"; grep -A 30 "FATAL EXCEPTION" "$GITHUB_WORKSPACE/e2e-artifacts/logcat.txt"; exit 1; }
             RUNNING=$(adb shell "pidof com.vtsapps.familyos" || true)
-            if [ -z "$RUNNING" ]; then
-              echo "App process is not running after launch (crashed or never started)"
-              exit 1
-            fi
+            [ -z "$RUNNING" ] && { echo "App process is not running after launch (crashed or never started)"; exit 1; }
             echo "App launched and is still running (pid $RUNNING) after 20s - smoke test passed"
 
       - name: Upload E2E smoke-test artifacts
