@@ -38,6 +38,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Gradle
+        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
