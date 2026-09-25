@@ -79,10 +79,24 @@ jobs:
             ${{ runner.os }}-pods-${{ hashFiles('apps/mobile/ios/Podfile') }}-
             ${{ runner.os }}-pods-
 
+      # ccache keys compiles by content, so it hits across fresh checkouts and
+      # dependency bumps where DerivedData (mtime-based) rebuilds everything.
+      - name: Install ccache
+        run: brew install ccache
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
       - name: Install CocoaPods
         working-directory: apps/mobile/ios
         env:
           USE_FRAMEWORKS: static
+          USE_CCACHE: '1'
         run: |
           bundle exec pod install
 
@@ -121,6 +135,19 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             PROVISIONING_PROFILE_UUID="" \
             DEVELOPMENT_TEAM=""
+
+      - name: ccache stats
+        if: always()
+        run: ccache -s
+
+      # Saved even when the build fails, so the compiles that did finish are
+      # reused by the next run.
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}
 
       - name: Package IPA for Physical Device Sideloading
         if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
