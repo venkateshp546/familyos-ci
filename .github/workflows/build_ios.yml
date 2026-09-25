@@ -21,6 +21,10 @@ jobs:
   build-ios:
     name: Build iOS (${{ inputs.branch || 'master' }})
     runs-on: macos-latest
+    # Pinned: the default cache dir was not the one xcodebuild's ccache wrote
+    # to, so the first run cached nothing (ccache -s showed 0 GiB).
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
 
     steps:
       - name: Checkout Private FamilyOS Repository
@@ -87,7 +91,7 @@ jobs:
       - name: Restore ccache
         uses: actions/cache/restore@v4
         with:
-          path: ~/Library/Caches/ccache
+          path: ${{ github.workspace }}/.ccache
           key: ccache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             ccache-${{ runner.os }}-
@@ -136,7 +140,7 @@ jobs:
 
       - name: ccache stats
         if: always()
-        run: ccache -s
+        run: ccache -sv
 
       # Saved even when the build fails, so the compiles that did finish are
       # reused by the next run.
@@ -144,7 +148,7 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ~/Library/Caches/ccache
+          path: ${{ github.workspace }}/.ccache
           key: ccache-${{ runner.os }}-${{ github.run_id }}
 
       - name: Package IPA for Physical Device Sideloading
