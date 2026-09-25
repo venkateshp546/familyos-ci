@@ -68,7 +68,8 @@ jobs:
           leaks=$(grep -rn "services/cloud" apps/mobile/src \
             --include=*.ts --include=*.tsx \
             | grep -v "src/services/cloud/" \
-            | grep -v "src/services/providers.ts" || true)
+            | grep -v "src/services/providers.ts" \
+            | grep -vE ':[0-9]+:[[:space:]]*(//|\*)' || true)
           if [ -n "$leaks" ]; then
             echo "A provider implementation is imported outside providers.ts:"
             echo "$leaks"
