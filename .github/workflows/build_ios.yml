@@ -106,6 +106,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mls-rs-
 
+      # Same core the app links, run natively on Apple silicon; Windows hosts cannot build it.
+      - name: Test MLS core
+        working-directory: apps/mobile/mls-poc-rs
+        run: cargo test --release
+
       # The Podfile links FamilyOSMls only if this produced the xcframework.
       - name: Build MLS core for iOS
         run: bash apps/mobile/mls-poc-rs/build-ios.sh
