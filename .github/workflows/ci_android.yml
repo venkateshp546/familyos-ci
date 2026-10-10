@@ -94,6 +94,24 @@ jobs:
             exit 1
           fi
 
+      # libfamilyos_mls.so is gitignored; without it MlsCore cannot load and chat is dead.
+      - name: Cache Rust MLS build
+        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            apps/mobile/mls-core/target
+          key: ${{ runner.os }}-mls-android-${{ hashFiles('apps/mobile/mls-core/Cargo.lock', 'apps/mobile/mls-core/src/**') }}
+
+      - name: Build MLS core for Android
+        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        run: |
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install cargo-ndk --locked
+          ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" bash apps/mobile/mls-core/build-android.sh
+          ls -l apps/mobile/android/app/src/main/jniLibs/*/libfamilyos_mls.so
+
       - name: Android Build
         if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
         run: |
