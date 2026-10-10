@@ -175,6 +175,8 @@ jobs:
           rm -rf build/Payload build/FamilyOSMobile.ipa
           mkdir -p build/Payload
           cp -R build/derivedData/Build/Products/Release-iphoneos/FamilyOSMobile.app build/Payload/
+          # The pod log can say SQLCipher while another static SQLite wins the link.
+          grep -q "cipher_version" build/Payload/FamilyOSMobile.app/FamilyOSMobile || { echo "App binary has no SQLCipher; chat DB would be plaintext"; exit 1; }
           cd build
           zip -r -q FamilyOSMobile.ipa Payload
           echo "FamilyOSMobile.ipa packaged successfully."
