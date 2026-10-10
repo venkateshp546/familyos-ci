@@ -121,7 +121,9 @@ jobs:
           USE_FRAMEWORKS: static
           USE_CCACHE: '1'
         run: |
-          bundle exec pod install
+          bundle exec pod install | tee pod-install.log
+          # Chat at rest needs SQLCipher; op-sqlite silently falls back to plain SQLite.
+          grep -q "using SQLCipher" pod-install.log || { echo "op-sqlite built without SQLCipher"; exit 1; }
 
       - name: Cache Xcode DerivedData
         uses: actions/cache@v4
