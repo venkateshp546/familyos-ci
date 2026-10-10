@@ -96,6 +96,20 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-
 
+      - name: Cache Rust MLS build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            apps/mobile/mls-poc-rs/target
+          key: ${{ runner.os }}-mls-rs-${{ hashFiles('apps/mobile/mls-poc-rs/Cargo.lock', 'apps/mobile/mls-poc-rs/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-mls-rs-
+
+      # The Podfile links FamilyOSMls only if this produced the xcframework.
+      - name: Build MLS core for iOS
+        run: bash apps/mobile/mls-poc-rs/build-ios.sh
+
       - name: Install CocoaPods
         working-directory: apps/mobile/ios
         env:
