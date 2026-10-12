@@ -1,0 +1,67 @@
+name: MCP Gateway Verification CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to verify from Mcp private repository'
+        required: true
+        default: 'master'
+        type: string
+  repository_dispatch:
+    types: [mcp-push, mcp-verify]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify rh-gateway (${{ inputs.branch || github.event.client_payload.branch || 'master' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: rh-gateway
+
+    steps:
+      # Deploy keys are per repository, so Mcp needs its own read-only key (MCP_SSH_KEY).
+      - name: Checkout Private Mcp Repository
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/Mcp
+          ssh-key: ${{ secrets.MCP_SSH_KEY }}
+          ref: ${{ inputs.branch || github.event.client_payload.branch || 'master' }}
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: rh-gateway/package-lock.json
+
+      # rh-gateway/.npmrc sets legacy-peer-deps; npm 10 crashes resolving this peer set without it.
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Runs in workerd with Robinhood fully mocked; no network or credentials needed.
+      - name: Security & Unit Tests
+        run: npm test
+
+      - name: Bundle Worker (dry run, no deploy)
+        run: npx wrangler deploy --dry-run --outdir dist
+
+      - name: Check no credentials are committed
+        shell: bash
+        run: |
+          hits=$(grep -rnE '(CLOUDFLARE_API_TOKEN|client_secret|access_token|refresh_token)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9_\-]{16,}' \
+            src scripts wrangler.jsonc README.md || true)
+          if [ -n "$hits" ]; then
+            echo "Possible credential committed:"
+            echo "$hits"
+            exit 1
+          fi
