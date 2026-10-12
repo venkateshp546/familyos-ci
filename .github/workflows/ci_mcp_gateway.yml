@@ -33,12 +33,14 @@ jobs:
         working-directory: rh-gateway
 
     steps:
-      # Deploy keys are per repository, so Mcp needs its own read-only key (MCP_SSH_KEY).
+      # Uses MCP_SSH_KEY (read-only deploy key on Mcp) when set; otherwise falls back to the
+      # existing PRIVATE_REPO_TOKEN, which works if that token can read venkateshp546/Mcp.
       - name: Checkout Private Mcp Repository
         uses: actions/checkout@v4
         with:
           repository: venkateshp546/Mcp
           ssh-key: ${{ secrets.MCP_SSH_KEY }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           ref: ${{ inputs.branch || github.event.client_payload.branch || 'master' }}
 
       - name: Record verified commit
@@ -101,6 +103,7 @@ jobs:
         with:
           repository: venkateshp546/Mcp
           ssh-key: ${{ secrets.MCP_SSH_KEY }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           ref: ${{ needs.verify.outputs.sha }}
 
       - name: Refuse placeholder configuration
@@ -124,6 +127,7 @@ jobs:
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Optional: wrangler finds the account itself when the token covers exactly one.
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
 
