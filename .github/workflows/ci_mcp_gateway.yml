@@ -1,0 +1,151 @@
+name: MCP Gateway Verification CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to verify from Mcp private repository'
+        required: true
+        default: 'master'
+        type: string
+      deploy:
+        description: 'Deploy to Cloudflare after verification passes'
+        required: true
+        default: false
+        type: boolean
+  repository_dispatch:
+    types: [mcp-push, mcp-verify]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify rh-gateway (${{ inputs.branch || github.event.client_payload.branch || 'master' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      sha: ${{ steps.rev.outputs.sha }}
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: rh-gateway
+
+    steps:
+      # Uses MCP_SSH_KEY (read-only deploy key on Mcp) when set; otherwise falls back to the
+      # existing PRIVATE_REPO_TOKEN, which works if that token can read venkateshp546/Mcp.
+      - name: Checkout Private Mcp Repository
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/Mcp
+          ssh-key: ${{ secrets.MCP_SSH_KEY }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: ${{ inputs.branch || github.event.client_payload.branch || 'master' }}
+
+      - name: Record verified commit
+        id: rev
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: rh-gateway/package-lock.json
+
+      # rh-gateway/.npmrc sets legacy-peer-deps; npm 10 crashes resolving this peer set without it.
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Runs in workerd with Robinhood fully mocked; no network or credentials needed.
+      - name: Security & Unit Tests
+        run: npm test
+
+      - name: Bundle Worker (dry run, no deploy)
+        run: npx wrangler deploy --dry-run --outdir dist
+
+      - name: Check no credentials are committed
+        shell: bash
+        run: |
+          hits=$(grep -rnE '(CLOUDFLARE_API_TOKEN|client_secret|access_token|refresh_token)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9_\-]{16,}' \
+            src scripts wrangler.jsonc README.md || true)
+          if [ -n "$hits" ]; then
+            echo "Possible credential committed:"
+            echo "$hits"
+            exit 1
+          fi
+
+  # Manual only, and only after verify passes on the exact same commit.
+  deploy:
+    name: Deploy rh-gateway to Cloudflare
+    needs: verify
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Add required reviewers on this environment to gate deploys behind an approval.
+    environment: cloudflare-production
+    concurrency:
+      group: rh-gateway-deploy
+      cancel-in-progress: false
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    defaults:
+      run:
+        working-directory: rh-gateway
+
+    steps:
+      - name: Checkout Verified Commit
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/Mcp
+          ssh-key: ${{ secrets.MCP_SSH_KEY }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: ${{ needs.verify.outputs.sha }}
+
+      - name: Refuse placeholder configuration
+        shell: bash
+        run: |
+          if grep -n 'REPLACE_WITH' wrangler.jsonc; then
+            echo "wrangler.jsonc still has placeholders; set them in the Mcp repo first."
+            exit 1
+          fi
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: rh-gateway/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Optional: wrangler finds the account itself when the token covers exactly one.
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      # A deploy only counts if the live endpoint answers correctly.
+      - name: Verify live endpoint
+        shell: bash
+        run: |
+          BASE=$(node -e 'const t=require("fs").readFileSync("wrangler.jsonc","utf8");const m=t.match(/"PUBLIC_BASE_URL"\s*:\s*"([^"]+)"/);if(!m)process.exit(1);console.log(m[1])')
+          echo "Checking $BASE"
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o health.json -w '%{http_code}' "$BASE/healthz" || true)
+            [ "$code" = "200" ] && break
+            sleep 5
+          done
+          cat health.json; echo
+          [ "$code" = "200" ] || { echo "healthz returned $code"; exit 1; }
+          grep -q '"status":"ok"' health.json || { echo "healthz not ok"; exit 1; }
+          mcp=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/mcp")
+          [ "$mcp" = "401" ] || { echo "unauthenticated /mcp returned $mcp, expected 401"; exit 1; }
+          echo "Live: healthz 200, unauthenticated /mcp 401."
+          echo "Roll back with: npx wrangler versions list && npx wrangler rollback <version-id>"
