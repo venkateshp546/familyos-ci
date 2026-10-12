@@ -13,7 +13,13 @@ Dedicated CI runner repository leveraging GitHub Actions public macOS runners fo
 
 Verifies `rh-gateway/` in the private `Mcp` repository: `npm ci`, typecheck, the workerd test
 suite (Robinhood mocked), a `wrangler deploy --dry-run` bundle, and a committed-credential scan.
-It never deploys and needs no Cloudflare or Robinhood credentials.
+Verification needs no Cloudflare or Robinhood credentials.
+
+Deploy is a separate job: manual run with `deploy: true` only. It deploys the exact commit that
+passed verification, refuses placeholder config, then requires `/healthz` 200 and an
+unauthenticated `/mcp` 401. Secrets: `CLOUDFLARE_API_TOKEN` (Workers Admin for the first deploy,
+then Editor for `rh-readonly-gateway` only) and `CLOUDFLARE_ACCOUNT_ID`, in the
+`cloudflare-production` environment. Add required reviewers on that environment to gate deploys.
 
 - **Secret:** `MCP_SSH_KEY`, the private half of a **read-only deploy key** added to `venkateshp546/Mcp`
   (deploy keys are per repository, so `PRIVATE_SSH_KEY` cannot be reused).
