@@ -18,7 +18,7 @@ Verification needs no Cloudflare or Robinhood credentials.
 Deploy is a separate job: manual run with `deploy: true` only. It deploys the exact commit that
 passed verification, refuses placeholder config, then requires `/healthz` 200 and an
 unauthenticated `/mcp` 401. Secrets: `CLOUDFLARE_API_TOKEN` (Workers Admin for the first deploy,
-then Editor for `rh-readonly-gateway` only) and optionally `CLOUDFLARE_ACCOUNT_ID`, in the
+then Editor for `robinhood-mcp` only) and optionally `CLOUDFLARE_ACCOUNT_ID`, in the
 `cloudflare-production` environment. Add required reviewers on that environment to gate deploys.
 
 - **Checkout:** uses `MCP_SSH_KEY` (a read-only deploy key on `venkateshp546/Mcp`) when set, else the
