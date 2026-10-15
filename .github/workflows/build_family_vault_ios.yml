@@ -56,7 +56,7 @@ jobs:
 
       - name: Check the Rust core is linked
         working-directory: app
-        run: nm build/ios/iphoneos/Runner.app/Runner | grep -q fv_call || { echo "fv_call missing from Runner"; exit 1; }
+        run: nm -gU build/ios/iphoneos/Runner.app/Runner | grep -q _fv_call || { echo "fv_call missing from Runner"; exit 1; }
 
       - name: Package IPA for sideloading
         working-directory: app
