@@ -46,7 +46,11 @@ jobs:
         working-directory: core
         env:
           CARGO_PROFILE_RELEASE_STRIP: 'false'
-        run: cargo build --release --lib --target aarch64-apple-ios
+          CARGO_PROFILE_RELEASE_LTO: 'false'
+        run: |
+          cargo build --release --lib --target aarch64-apple-ios
+          L=target/aarch64-apple-ios/release/libfv_core.a
+          ls -la $L; ar t $L | head -5; nm -gU $L 2>&1 | grep -E "fv_|error" | head -5
 
       - uses: subosito/flutter-action@v2
         with:
