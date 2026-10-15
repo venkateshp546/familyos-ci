@@ -1,0 +1,83 @@
+# Copy to venkateshp546/familyos-ci/.github/workflows/ (public repo, free macOS minutes).
+# Needs secret FAMILY_LEGACY_SSH_KEY there (read-only deploy key on family-legacy).
+name: Family Vault iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from the private family-legacy repository'
+        required: true
+        default: 'main'
+        type: string
+
+jobs:
+  build-ios:
+    name: Build iOS (${{ inputs.branch }})
+    runs-on: macos-latest
+    steps:
+      - name: Checkout private family-legacy
+        uses: actions/checkout@v4
+        with:
+          repository: venkateshp546/family-legacy
+          ssh-key: ${{ secrets.FAMILY_LEGACY_SSH_KEY }}
+          ref: ${{ inputs.branch }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            core/target
+          key: ${{ runner.os }}-fv-core-${{ hashFiles('core/Cargo.lock', 'core/src/**') }}
+          restore-keys: ${{ runner.os }}-fv-core-
+
+      # Windows hosts cannot run the core tests; run them natively here.
+      - name: Test Rust core
+        working-directory: core
+        run: cargo test --release --lib
+
+      - name: Build Rust core for iOS
+        working-directory: core
+        run: cargo build --release --lib --target aarch64-apple-ios
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+          cache: true
+
+      - name: Build iOS app (unsigned)
+        working-directory: app
+        run: flutter build ios --release --no-codesign --dart-define=GOOGLE_SERVER_CLIENT_ID=766760566795-4tj4rtag8rti206nd2vfvek3uu8aqhfn.apps.googleusercontent.com
+
+      - name: Check the Rust core is linked
+        working-directory: app
+        run: nm build/ios/iphoneos/Runner.app/Runner | grep -q fv_call || { echo "fv_call missing from Runner"; exit 1; }
+
+      - name: Package IPA for sideloading
+        working-directory: app
+        run: |
+          rm -rf build/Payload && mkdir -p build/Payload
+          cp -R build/ios/iphoneos/Runner.app build/Payload/
+          cd build && zip -r -q FamilyVault.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FamilyVault-IPA
+          path: app/build/FamilyVault.ipa
+          retention-days: 14
+
+      # cleanup.yml deletes finished runs (and their artifacts), so keep the IPA as a private release.
+      - name: Publish release to private family-legacy
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          gh release delete ios-latest -R venkateshp546/family-legacy -y --cleanup-tag || true
+          gh release create ios-latest app/build/FamilyVault.ipa -R venkateshp546/family-legacy \
+            --target "${{ inputs.branch }}" --title "Family Vault iOS latest" \
+            --notes "Unsigned build of ${{ inputs.branch }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" --latest
