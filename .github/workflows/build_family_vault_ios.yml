@@ -89,8 +89,11 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/Developer/Xcode/DerivedData
-          key: ${{ runner.os }}-fv-xcode-${{ hashFiles('app/pubspec.lock') }}
-          restore-keys: ${{ runner.os }}-fv-xcode-
+          # run_id: an exact-key hit is never re-saved, so build-setting changes would rebuild forever.
+          key: ${{ runner.os }}-fv-xcode-${{ hashFiles('app/pubspec.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-fv-xcode-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-fv-xcode-
 
       # FLUTTER_XCODE_* env vars are passed to xcodebuild as build settings.
       - name: Build iOS app (unsigned)
