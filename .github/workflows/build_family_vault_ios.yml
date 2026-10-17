@@ -21,6 +21,8 @@ jobs:
       # Xcode passes module, index and pch flags ccache must not key on.
       CCACHE_SLOPPINESS: clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
       CCACHE_MAXSIZE: 2G
+      # Clang modules are only cacheable in depend mode.
+      CCACHE_DEPEND: 'true'
     steps:
       - name: Checkout private family-legacy
         uses: actions/checkout@v4
@@ -99,6 +101,7 @@ jobs:
           FLUTTER_XCODE_LD: clang
           FLUTTER_XCODE_LDPLUSPLUS: clang++
           FLUTTER_XCODE_COMPILER_INDEX_STORE_ENABLE: 'NO'
+          FLUTTER_XCODE_CLANG_ENABLE_EXPLICIT_MODULES: 'NO'
         run: flutter build ios --release --no-codesign --dart-define=GOOGLE_SERVER_CLIENT_ID=766760566795-4tj4rtag8rti206nd2vfvek3uu8aqhfn.apps.googleusercontent.com
 
       - name: ccache stats
