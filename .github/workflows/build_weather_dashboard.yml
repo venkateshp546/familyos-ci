@@ -27,6 +27,27 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            weather-dashboard/rust-core/target
+          key: ${{ runner.os }}-weather-rs-${{ hashFiles('weather-dashboard/rust-core/Cargo.lock', 'weather-dashboard/rust-core/Cargo.toml', 'weather-dashboard/rust-core/build.rs', 'weather-dashboard/rust-core/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-weather-rs-
+
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: |
+            weather-dashboard/build/DerivedData
+            weather-dashboard/build/DerivedDataTest
+          key: ${{ runner.os }}-weather-dd-${{ hashFiles('weather-dashboard/project.yml', 'weather-dashboard/ios/**', 'weather-dashboard/rust-core/src/**') }}
+          restore-keys: |
+            ${{ runner.os }}-weather-dd-
+
       - name: Rust unit tests (host)
         working-directory: weather-dashboard/rust-core
         run: cargo test
