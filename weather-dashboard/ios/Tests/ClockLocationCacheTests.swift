@@ -159,3 +159,43 @@ final class CityTests: XCTestCase {
         XCTAssertEqual((nil as Temperature?).pairText, "—")
     }
 }
+
+final class RefresherTests: XCTestCase {
+    private func makeCache() -> WeatherCache {
+        let name = "test.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        return WeatherCache(defaults: d)
+    }
+
+    private func cachedSnapshot() -> WeatherSnapshot {
+        WeatherSnapshot(locationName: "LOMBARD", latitude: 41.88, longitude: -88.02, source: .noaa, stationID: nil, stationName: nil,
+                        current: Temperature(celsius: 1), observedAt: Fixtures.now, high: nil, low: nil,
+                        fetchedAt: Fixtures.now, observationNote: nil)
+    }
+
+    func testFreshCacheIsNotRefetched() async {
+        let cache = makeCache(); cache.save(cachedSnapshot())
+        let client = MockClient(); client.failAll = true
+        let out = await WeatherRefresher.refresh(cities: [City.defaults[0]], cache: cache, maxAge: 900,
+                                                 now: Fixtures.now.addingTimeInterval(300), service: Fixtures.service(client))
+        XCTAssertTrue(client.requested.isEmpty)
+        XCTAssertEqual(out["home"]?.locationName, "LOMBARD")
+    }
+
+    func testStaleCacheTriggersFetchAndFallsBackToCacheOnFailure() async {
+        let cache = makeCache(); cache.save(cachedSnapshot())
+        let client = MockClient(); client.failAll = true
+        let out = await WeatherRefresher.refresh(cities: [City.defaults[0]], cache: cache, maxAge: 900,
+                                                 now: Fixtures.now.addingTimeInterval(3600), service: Fixtures.service(client))
+        XCTAssertFalse(client.requested.isEmpty)
+        XCTAssertNotNil(out["home"])
+    }
+
+    func testForceRefreshIgnoresFreshCache() async {
+        let cache = makeCache(); cache.save(cachedSnapshot())
+        let client = Fixtures.client(observationNear: Fixtures.observation(temp: "12.5", time: "2026-11-14T17:50:00Z"))
+        let out = await WeatherRefresher.refresh(cities: [City.defaults[0]], cache: cache, maxAge: 0, now: Fixtures.now, service: Fixtures.service(client))
+        XCTAssertEqual(out["home"]?.current?.celsius, 12.5)
+    }
+}

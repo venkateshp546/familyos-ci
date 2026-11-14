@@ -31,6 +31,8 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIUserInterfaceStyle: Dark
         ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes: [fetch]
+        BGTaskSchedulerPermittedIdentifiers: [com.vtsapps.weatherdashboard.refresh]
         NSLocationWhenInUseUsageDescription: Your location is used to show nearby weather.
     entitlements:
       path: ios/WeatherDashboard/WeatherDashboard.entitlements

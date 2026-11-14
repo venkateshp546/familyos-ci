@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject private var model = DashboardModel()
     @State private var showSettings = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -36,6 +37,7 @@ struct DashboardView: View {
         }
         .task { model.start() }
         .onChange(of: model.location.coordinate) { _, _ in Task { await model.gpsUpdated() } }
+        .onChange(of: scenePhase) { _, phase in if phase == .background { BackgroundRefresh.schedule() } }
         .sheet(isPresented: $showSettings) { SettingsSheet(model: model) }
     }
 

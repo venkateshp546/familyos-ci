@@ -35,32 +35,13 @@ struct WeatherProvider: TimelineProvider {
         Task {
             let cache = WeatherCache()
             let cities = Array(cache.loadCities().prefix(family.rowCount))
-            var service = WeatherService()
-            service.allowOpenMeteoFallback = cache.fallbackEnabled
-            let repo = WeatherRepository(service: service, cache: cache)
-
-            // Refresh only cities whose cache is older than 20 minutes; iOS decides actual reload timing.
-            var snapshots: [String: WeatherSnapshot] = [:]
-            await withTaskGroup(of: (String, WeatherSnapshot?).self) { group in
-                for city in cities {
-                    group.addTask {
-                        let cached = cache.load(cityID: city.id)
-                        if let cached, Date().timeIntervalSince(cached.fetchedAt) <= 20 * 60 { return (city.id, cached) }
-                        switch await repo.refresh(for: city.coordinate, cityID: city.id) {
-                        case .fresh(let s): return (city.id, s)
-                        case .cached(let s, _): return (city.id, s)
-                        case .failed: return (city.id, nil)
-                        }
-                    }
-                }
-                for await (id, s) in group { snapshots[id] = s }
-            }
-            let rows = cities.map { CityEntry(city: $0, snapshot: snapshots[$0.id] ?? nil) }
-            // One entry per minute for an hour keeps the clocks current without background work.
-            // Weather is requested again after ~30 minutes; iOS may delay this.
-            let start = Calendar.current.date(bySetting: .second, value: 0, of: .now) ?? .now
-            let entries = (0..<60).map { WeatherEntry(date: start.addingTimeInterval(Double($0) * 60), rows: rows) }
-            completion(Timeline(entries: entries, policy: .after(start.addingTimeInterval(30 * 60))))
+            // Fetch only cities whose cache is older than 15 minutes (NOAA stations report about hourly).
+            let snapshots = await WeatherRefresher.refresh(cities: cities, cache: cache, maxAge: 15 * 60)
+            let rows = cities.map { CityEntry(city: $0, snapshot: snapshots[$0.id]) }
+            // Clocks are live (system-rendered), so one entry is enough.
+            // Ask iOS to reload in ~20 minutes; it may choose a different time within its budget.
+            let entry = WeatherEntry(date: .now, rows: rows)
+            completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(20 * 60))))
         }
     }
 
@@ -96,12 +77,28 @@ struct WeatherWidgetView: View {
                 if index > 0 { Divider().overlay(.white.opacity(0.15)) }
                 rowView(row).frame(maxHeight: .infinity)
             }
+            footer
             if large, entry.rows.contains(where: { $0.snapshot?.source == .openMeteo }) {
                 Text("* Open-Meteo (fallback). Others: NOAA.").font(.caption2).foregroundStyle(Theme.secondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(Theme.background, for: .widget)
+    }
+
+    /// "Updated 8:40 AM" plus a tap-to-refresh button.
+    private var footer: some View {
+        let updated = entry.rows.compactMap { $0.snapshot?.fetchedAt }.max()
+        return HStack(spacing: 4) {
+            if let updated { Text("Updated \(updated, style: .time)") }
+            Spacer()
+            Button(intent: RefreshWeatherIntent()) {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.plain)
+        }
+        .font(.system(size: 10)).foregroundStyle(Theme.secondary)
+        .padding(.top, 2)
     }
 
     @ViewBuilder private func rowView(_ row: CityEntry) -> some View {
@@ -116,7 +113,7 @@ struct WeatherWidgetView: View {
                         .font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
                 }
                 Spacer(minLength: 2)
-                Text(row.city.clock.string(at: entry.date))
+                Text(entry.date, style: .time).environment(\.timeZone, row.city.clock.timeZone)
                     .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit()).foregroundStyle(.white)
                     .minimumScaleFactor(0.7).lineLimit(1)
             }
@@ -128,7 +125,7 @@ struct WeatherWidgetView: View {
                     .foregroundStyle(row.city.isHome ? Theme.accent : .white)
                     .lineLimit(1).minimumScaleFactor(0.6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(row.city.clock.string(at: entry.date))
+                Text(entry.date, style: .time).environment(\.timeZone, row.city.clock.timeZone)
                     .font(.system(size: large ? 22 : 15, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
                     .frame(width: large ? 96 : 70, alignment: .leading)

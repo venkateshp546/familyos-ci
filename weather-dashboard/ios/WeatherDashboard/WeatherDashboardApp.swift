@@ -6,5 +6,9 @@ struct WeatherDashboardApp: App {
         WindowGroup {
             DashboardView().preferredColorScheme(.dark)
         }
+        .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
+            BackgroundRefresh.schedule()
+            await BackgroundRefresh.run()
+        }
     }
 }
