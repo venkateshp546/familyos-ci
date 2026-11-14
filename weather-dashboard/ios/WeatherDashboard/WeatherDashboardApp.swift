@@ -4,7 +4,7 @@ import SwiftUI
 struct WeatherDashboardApp: App {
     var body: some Scene {
         WindowGroup {
-            DashboardView()
+            DashboardView().preferredColorScheme(.dark)
         }
     }
 }

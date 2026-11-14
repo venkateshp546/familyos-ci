@@ -2,17 +2,83 @@ name: WeatherDashboard
 options:
   bundleIdPrefix: com.vtsapps
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    SWIFT_INCLUDE_PATHS: $(SRCROOT)/rust-core/include
+    LIBRARY_SEARCH_PATHS[sdk=iphoneos*]: $(SRCROOT)/rust-core/build/device
+    LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]: $(SRCROOT)/rust-core/build/sim
+    OTHER_LDFLAGS: -lweather_core
 targets:
   WeatherDashboard:
     type: application
     platform: iOS
     sources:
       - ios/WeatherDashboard
+      - ios/Shared
+    dependencies:
+      - target: WeatherWidget
+    info:
+      path: ios/WeatherDashboard/Info.plist
+      properties:
+        CFBundleDisplayName: Weather
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Your location is used to show nearby weather.
+    entitlements:
+      path: ios/WeatherDashboard/WeatherDashboard.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.vtsapps.weatherdashboard]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.vtsapps.weatherdashboard
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Location helps show local weather."
-        SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+  WeatherWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - ios/WeatherWidget
+      - ios/Shared
+    info:
+      path: ios/WeatherWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Weather Widget
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: ios/WeatherWidget/WeatherWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.vtsapps.weatherdashboard]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vtsapps.weatherdashboard.widget
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+  WeatherDashboardTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ios/Tests
+      - ios/Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vtsapps.weatherdashboard.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+schemes:
+  WeatherDashboard:
+    build:
+      targets:
+        WeatherDashboard: all
+        WeatherWidget: all
+    test:
+      targets:
+        - WeatherDashboardTests

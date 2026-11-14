@@ -1,0 +1,4 @@
+module WeatherCore {
+    header "weather_core.h"
+    export *
+}

@@ -9,43 +9,77 @@ permissions:
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: weather-dashboard
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Toolchain versions
         run: |
           xcodebuild -version
           swift --version
-          rustc --version || true
+          rustc --version
+          cargo --version
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Build Rust core
+      - name: Rust unit tests (host)
         working-directory: weather-dashboard/rust-core
-        run: |
-          rustup target add aarch64-apple-ios
-          cargo build --release --target aarch64-apple-ios
+        run: cargo test
+
+      - name: Build Rust static libraries (device + simulator)
+        run: ./scripts/build_rust.sh
+
+      - name: Verify generated C header is committed and current
+        run: git diff --exit-code -- rust-core/include/weather_core.h
 
       - name: Generate Xcode project
-        working-directory: weather-dashboard
         run: xcodegen generate
 
-      - name: Build unsigned iOS app
-        working-directory: weather-dashboard
+      - name: Run Swift unit tests (simulator)
         run: |
-          xcodebuild -project WeatherDashboard.xcodeproj             -scheme WeatherDashboard             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath build/DerivedData             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             build
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          c=[x for k,v in d.items() if "iOS" in k for x in v if x["name"].startswith("iPhone")]
+          print(c[-1]["udid"])')
+          echo "Simulator: $UDID"
+          set -o pipefail
+          xcodebuild test \
+            -project WeatherDashboard.xcodeproj \
+            -scheme WeatherDashboard \
+            -destination "id=$UDID" \
+            -derivedDataPath build/DerivedDataTest \
+            CODE_SIGNING_ALLOWED=NO \
+            -resultBundlePath build/tests.xcresult | tee build/test.log | tail -60
+
+      - name: Build unsigned device app + widget
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project WeatherDashboard.xcodeproj \
+            -scheme WeatherDashboard \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -40
 
       - name: Package unsigned IPA
-        working-directory: weather-dashboard
         run: |
           APP="build/DerivedData/Build/Products/Release-iphoneos/WeatherDashboard.app"
           test -d "$APP"
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/
-          cd build
-          zip -qr WeatherDashboard-unsigned.ipa Payload
+          test -d "$APP/PlugIns/WeatherWidget.appex"
+          rm -rf build/ipa && mkdir -p build/ipa/Payload
+          cp -R "$APP" build/ipa/Payload/
+          (cd build/ipa && zip -qry ../WeatherDashboard-unsigned.ipa Payload)
+
+      - name: Validate IPA (bundle IDs, structure, no simulator binaries)
+        run: ./scripts/validate_ipa.sh build/WeatherDashboard-unsigned.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -53,3 +87,12 @@ jobs:
           name: WeatherDashboard-unsigned-IPA
           path: weather-dashboard/build/WeatherDashboard-unsigned.ipa
           retention-days: 14
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeatherDashboard-test-log
+          path: weather-dashboard/build/test.log
+          if-no-files-found: ignore
+          retention-days: 7
