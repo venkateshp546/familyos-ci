@@ -122,7 +122,7 @@ struct WeatherWidgetView: View {
             }
         } else {
             // Four columns: name | time | temperature | high/low.
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Text(row.displayName)
                     .font(large ? .title3.weight(.bold) : .subheadline.weight(.bold))
                     .foregroundStyle(row.city.isHome ? Theme.accent : .white)
@@ -131,19 +131,18 @@ struct WeatherWidgetView: View {
                 Text(row.city.clock.string(at: entry.date))
                     .font(.system(size: large ? 22 : 15, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
-                    .frame(width: large ? 96 : 66, alignment: .center)
+                    .frame(width: large ? 96 : 70, alignment: .leading)
                 Text((s?.current?.dualText ?? "—") + star)
-                    .font(.system(size: large ? 20 : 14, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    .font(.system(size: large ? 19 : 13, weight: .bold, design: .rounded)).foregroundStyle(.white)
                     .lineLimit(1).minimumScaleFactor(0.5)
-                    .frame(width: large ? 118 : 88, alignment: .trailing)
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text("H \(s?.high.pairText ?? "—")")
-                    Text("L \(s?.low.pairText ?? "—")")
-                }
-                .font(large ? .footnote : .caption2).foregroundStyle(Theme.secondary)
-                .lineLimit(1).minimumScaleFactor(0.6)
-                .frame(width: large ? 72 : 54, alignment: .trailing)
+                    .frame(width: large ? 118 : 92, alignment: .trailing)
+                // One text block so the two lines sit tight together.
+                Text("H \(s?.high.pairText ?? "—")\nL \(s?.low.pairText ?? "—")")
+                    .font(large ? .footnote : .caption2).foregroundStyle(Theme.secondary)
+                    .multilineTextAlignment(.trailing).lineSpacing(0).lineLimit(2).minimumScaleFactor(0.6)
+                    .frame(width: large ? 72 : 56, alignment: .trailing)
             }
+            .padding(.vertical, 4)
         }
     }
 }
