@@ -7,13 +7,10 @@ struct WeatherService {
     var maxObservationAge: TimeInterval = 90 * 60
     var maxStationsToTry = 8
     var allowOpenMeteoFallback = true
-    /// Tried first when set. Any failure falls through to NOAA / Open-Meteo.
-    var weatherKitFetch: WeatherKitProvider.Fetcher? = nil
 
     // MARK: Public entry point
 
     func fetch(for coordinate: Coordinate) async throws -> WeatherSnapshot {
-        if let wk = weatherKitFetch, let snapshot = try? await wk(coordinate) { return snapshot }
         do {
             return try await fetchNOAA(for: coordinate)
         } catch let noaaError as WeatherError {

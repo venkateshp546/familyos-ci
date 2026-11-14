@@ -47,19 +47,6 @@ struct WeatherCache {
         return list
     }
 
-    static let weatherKitKey = "useWeatherKit"
-    static let weatherKitRetryKey = "weatherKitRetryAfter"
-
-    var weatherKitEnabled: Bool {
-        get { defaults.object(forKey: Self.weatherKitKey) as? Bool ?? true }
-        nonmutating set { defaults.set(newValue, forKey: Self.weatherKitKey) }
-    }
-
-    var weatherKitRetryAfter: Date {
-        get { Date(timeIntervalSince1970: defaults.double(forKey: Self.weatherKitRetryKey)) }
-        nonmutating set { defaults.set(newValue.timeIntervalSince1970, forKey: Self.weatherKitRetryKey) }
-    }
-
     var fallbackEnabled: Bool {
         get { defaults.object(forKey: Self.fallbackKey) as? Bool ?? true }
         nonmutating set { defaults.set(newValue, forKey: Self.fallbackKey) }

@@ -161,11 +161,6 @@ struct SettingsSheet: View {
                     if let m = model.manualLocation { Text("Manual: \(m.name ?? "custom")").foregroundStyle(.secondary) }
                 }
                 Section {
-                    Toggle("Try Apple WeatherKit first", isOn: $model.useWeatherKit)
-                } footer: {
-                    Text("Works only if your signing profile includes WeatherKit. If it fails, NOAA is used, then Open-Meteo.")
-                }
-                Section {
                     Toggle("Open-Meteo fallback", isOn: $model.useFallback)
                 } footer: {
                     Text("NOAA covers the US only. Elsewhere, or when NOAA is unreachable, Open-Meteo supplies data, marked with * and labeled.")

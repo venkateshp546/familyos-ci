@@ -10,10 +10,7 @@ enum WeatherRefresher {
                         now: Date = Date(),
                         service: WeatherService? = nil) async -> [String: WeatherSnapshot] {
         var svc = service ?? WeatherService()
-        if service == nil {
-            svc.allowOpenMeteoFallback = cache.fallbackEnabled
-            svc.weatherKitFetch = WeatherKitProvider.fetcher(cache: cache)
-        }
+        if service == nil { svc.allowOpenMeteoFallback = cache.fallbackEnabled }
         let repo = WeatherRepository(service: svc, cache: cache)
         var result: [String: WeatherSnapshot] = [:]
         await withTaskGroup(of: (String, WeatherSnapshot?).self) { group in

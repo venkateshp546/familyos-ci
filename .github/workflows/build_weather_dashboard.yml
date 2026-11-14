@@ -103,34 +103,11 @@ jobs:
       - name: Validate IPA (bundle IDs, structure, no simulator binaries)
         run: ./scripts/validate_ipa.sh build/WeatherDashboard.ipa
 
-      - name: Package experimental WeatherKit IPA (ad-hoc signed with entitlements)
-        run: |
-          # Same binaries; entitlements are embedded via an ad-hoc signature so a re-signer can try
-          # to carry them over. No certificates or secrets are involved.
-          rm -rf build/wk && mkdir -p build/wk/Payload
-          cp -R build/DerivedData/Build/Products/Release-iphoneos/WeatherDashboard.app build/wk/Payload/
-          cat > build/wk/ent.plist <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>com.apple.security.application-groups</key><array><string>group.com.vtsapps.weatherdashboard</string></array>
-            <key>com.apple.developer.weatherkit</key><true/>
-          </dict></plist>
-          PLIST
-          APP=build/wk/Payload/WeatherDashboard.app
-          codesign --force --sign - --entitlements build/wk/ent.plist "$APP/PlugIns/WeatherWidget.appex"
-          codesign --force --sign - --entitlements build/wk/ent.plist "$APP"
-          codesign -d --entitlements - "$APP" 2>&1 | grep -i weatherkit
-          (cd build/wk && zip -qry ../WeatherDashboard-WeatherKit.ipa Payload)
-          ./scripts/validate_ipa.sh build/WeatherDashboard-WeatherKit.ipa
-
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: WeatherDashboard-IPA
-          path: |
-            weather-dashboard/build/WeatherDashboard.ipa
-            weather-dashboard/build/WeatherDashboard-WeatherKit.ipa
+          path: weather-dashboard/build/WeatherDashboard.ipa
           retention-days: 14
 
       - name: Publish IPA to the single "weather-dashboard-latest" release
@@ -140,10 +117,10 @@ jobs:
           TAG="weather-dashboard-latest"
           # Replace the previous release and tag so there is always exactly one.
           gh release delete "$TAG" --cleanup-tag --yes || true
-          gh release create "$TAG" build/WeatherDashboard.ipa build/WeatherDashboard-WeatherKit.ipa \
+          gh release create "$TAG" build/WeatherDashboard.ipa \
             --target "${{ github.sha }}" \
             --title "Weather Dashboard (latest)" \
-            --notes "WeatherDashboard.ipa is the standard build. WeatherDashboard-WeatherKit.ipa is experimental: it carries WeatherKit and App Group entitlements for re-signers that preserve them. Device IPAs from run ${{ github.run_number }}, commit ${{ github.sha }}. Sign with Signulous before installing." \
+            --notes "Device IPA from run ${{ github.run_number }}, commit ${{ github.sha }}. Sign with Signulous before installing." \
             --prerelease
 
       - name: Upload test logs
