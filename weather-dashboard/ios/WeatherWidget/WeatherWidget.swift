@@ -46,50 +46,77 @@ struct WeatherWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WeatherEntry
 
+    private var tempSize: CGFloat { family == .systemLarge ? 64 : (family == .systemMedium ? 50 : 36) }
+    private var clockSize: CGFloat { family == .systemLarge ? 44 : (family == .systemMedium ? 32 : 17) }
+
     var body: some View {
         let s = entry.snapshot
-        VStack(alignment: .leading, spacing: family == .systemSmall ? 4 : 8) {
-            Text(s?.locationName ?? "LOMBARD").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(Theme.accent)
-            if let c = s?.current {
-                if family == .systemSmall {
-                    Text("\(c.fahrenheitRounded)°F").font(.system(size: 34, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    Text("\(c.celsiusRounded)°C").font(.title3.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
-                } else {
-                    Text(c.dualText).font(.system(size: family == .systemLarge ? 44 : 32, weight: .bold, design: .rounded))
-                        .minimumScaleFactor(0.6).lineLimit(1).foregroundStyle(.white)
-                }
-            } else {
-                Text(s == nil ? "Open app" : "No reading").font(.headline).foregroundStyle(.white.opacity(0.8))
-            }
-            if let s {
-                Text("H \(s.high.fText)/\(s.high.cText)  L \(s.low.fText)/\(s.low.cText)")
-                    .font(family == .systemSmall ? .caption2 : .footnote).foregroundStyle(.white)
-                    .minimumScaleFactor(0.7).lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            if family == .systemSmall {
-                ForEach(CityClock.all) { clock in
-                    HStack { Text(clock.name.prefix(3).uppercased()).font(.caption2).foregroundStyle(Theme.secondary)
-                        Spacer(); Text(clock.string(at: entry.date)).font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(.white) }
-                }
-            } else {
-                HStack {
-                    ForEach(CityClock.all) { clock in
-                        VStack(alignment: .leading) {
-                            Text(clock.name).font(.caption).foregroundStyle(Theme.secondary)
-                            Text(clock.string(at: entry.date)).font(family == .systemLarge ? .title.monospacedDigit().bold() : .title3.monospacedDigit().bold()).foregroundStyle(.white)
-                        }
-                        if clock != CityClock.all.last { Spacer() }
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            Text(s?.locationName ?? "LOMBARD")
+                .font(family == .systemSmall ? .footnote.weight(.bold) : .headline.weight(.bold))
+                .tracking(2).foregroundStyle(Theme.accent)
+            Spacer(minLength: 2)
+            temperature(s)
+            Spacer(minLength: 2)
+            highLow(s)
+            Spacer(minLength: 2)
+            clocks
             if family == .systemLarge, let s {
+                Spacer(minLength: 4)
                 Text([s.source.label, s.stationID.map { "Station \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption2).foregroundStyle(Theme.secondary)
+                    .font(.caption).foregroundStyle(Theme.secondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(Theme.background, for: .widget)
+    }
+
+    @ViewBuilder private func temperature(_ s: WeatherSnapshot?) -> some View {
+        if let c = s?.current {
+            if family == .systemSmall {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("\(c.fahrenheitRounded)°F").font(.system(size: tempSize, weight: .bold, design: .rounded))
+                    Text("\(c.celsiusRounded)°C").font(.system(size: 22, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                }.foregroundStyle(.white).minimumScaleFactor(0.6).lineLimit(1)
+            } else {
+                Text(c.dualText).font(.system(size: tempSize, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5).lineLimit(1).foregroundStyle(.white)
+            }
+        } else {
+            Text(s == nil ? "Open app" : "No reading").font(.title2.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
+        }
+    }
+
+    @ViewBuilder private func highLow(_ s: WeatherSnapshot?) -> some View {
+        if let s {
+            if family == .systemSmall {
+                Text("H \(s.high.fText)  L \(s.low.fText)").font(.footnote.weight(.semibold)).foregroundStyle(.white)
+                    .minimumScaleFactor(0.7).lineLimit(1)
+            } else {
+                HStack {
+                    Text("H \(s.high.fText) / \(s.high.cText)")
+                    Spacer()
+                    Text("L \(s.low.fText) / \(s.low.cText)")
+                }
+                .font(family == .systemLarge ? .title3.weight(.semibold) : .headline.weight(.semibold))
+                .foregroundStyle(.white).minimumScaleFactor(0.7).lineLimit(1)
+            }
+        }
+    }
+
+    private var clocks: some View {
+        HStack(alignment: .bottom) {
+            ForEach(Array(CityClock.all.enumerated()), id: \.element.id) { index, clock in
+                VStack(alignment: index == 0 ? .leading : .trailing, spacing: 0) {
+                    Text(family == .systemSmall ? clock.name.prefix(3).uppercased() : clock.name)
+                        .font(family == .systemSmall ? .caption2 : .subheadline).foregroundStyle(Theme.secondary)
+                    Text(clock.string(at: entry.date))
+                        .font(.system(size: clockSize, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white).minimumScaleFactor(0.6).lineLimit(1)
+                }
+                if index == 0 { Spacer(minLength: 4) }
+            }
+        }
     }
 }
 

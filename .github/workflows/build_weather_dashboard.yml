@@ -98,16 +98,16 @@ jobs:
           test -d "$APP/PlugIns/WeatherWidget.appex"
           rm -rf build/ipa && mkdir -p build/ipa/Payload
           cp -R "$APP" build/ipa/Payload/
-          (cd build/ipa && zip -qry ../WeatherDashboard-unsigned.ipa Payload)
+          (cd build/ipa && zip -qry ../WeatherDashboard.ipa Payload)
 
       - name: Validate IPA (bundle IDs, structure, no simulator binaries)
-        run: ./scripts/validate_ipa.sh build/WeatherDashboard-unsigned.ipa
+        run: ./scripts/validate_ipa.sh build/WeatherDashboard.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: WeatherDashboard-unsigned-IPA
-          path: weather-dashboard/build/WeatherDashboard-unsigned.ipa
+          name: WeatherDashboard-IPA
+          path: weather-dashboard/build/WeatherDashboard.ipa
           retention-days: 14
 
       - name: Publish IPA to the single "weather-dashboard-latest" release
@@ -117,10 +117,10 @@ jobs:
           TAG="weather-dashboard-latest"
           # Replace the previous release and tag so there is always exactly one.
           gh release delete "$TAG" --cleanup-tag --yes || true
-          gh release create "$TAG" build/WeatherDashboard-unsigned.ipa \
+          gh release create "$TAG" build/WeatherDashboard.ipa \
             --target "${{ github.sha }}" \
-            --title "Weather Dashboard (latest, unsigned)" \
-            --notes "Unsigned device IPA from run ${{ github.run_number }}, commit ${{ github.sha }}. Sign with Signulous before installing." \
+            --title "Weather Dashboard (latest)" \
+            --notes "Device IPA from run ${{ github.run_number }}, commit ${{ github.sha }}. Sign with Signulous before installing." \
             --prerelease
 
       - name: Upload test logs
