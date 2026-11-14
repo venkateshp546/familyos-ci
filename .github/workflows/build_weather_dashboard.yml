@@ -1,0 +1,55 @@
+name: Build Weather Dashboard IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          xcodebuild -version
+          swift --version
+          rustc --version || true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build Rust core
+        working-directory: weather-dashboard/rust-core
+        run: |
+          rustup target add aarch64-apple-ios
+          cargo build --release --target aarch64-apple-ios
+
+      - name: Generate Xcode project
+        working-directory: weather-dashboard
+        run: xcodegen generate
+
+      - name: Build unsigned iOS app
+        working-directory: weather-dashboard
+        run: |
+          xcodebuild -project WeatherDashboard.xcodeproj             -scheme WeatherDashboard             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath build/DerivedData             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             build
+
+      - name: Package unsigned IPA
+        working-directory: weather-dashboard
+        run: |
+          APP="build/DerivedData/Build/Products/Release-iphoneos/WeatherDashboard.app"
+          test -d "$APP"
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          zip -qr WeatherDashboard-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeatherDashboard-unsigned-IPA
+          path: weather-dashboard/build/WeatherDashboard-unsigned.ipa
+          retention-days: 14
