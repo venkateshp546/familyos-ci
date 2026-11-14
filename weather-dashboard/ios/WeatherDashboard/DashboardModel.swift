@@ -62,20 +62,28 @@ final class DashboardModel: ObservableObject {
         var errors: [String] = []
         let targets = cities.map { ($0, $0.isHome ? home : $0.coordinate) }
 
-        await withTaskGroup(of: (City, WeatherRepository.Outcome).self) { group in
-            for (city, coordinate) in targets {
-                group.addTask { (city, await repo.refresh(for: coordinate, cityID: city.id)) }
-            }
-            for await (city, outcome) in group {
-                switch outcome {
-                case .fresh(let s): snapshots[city.id] = s
-                case .cached(let s, let e): snapshots[city.id] = s; errors.append("\(city.name): \(e)")
-                case .failed(let e): errors.append("\(city.name): \(e)")
-                }
+        // Detached so SwiftUI cancelling the pull-to-refresh / .task context cannot abort the requests.
+        let results = await Task.detached { await Self.fetchAll(targets: targets, repo: repo) }.value
+        for (city, outcome) in results {
+            switch outcome {
+            case .fresh(let s): snapshots[city.id] = s
+            case .cached(let s, let e): snapshots[city.id] = s; errors.append("\(city.name): \(e)")
+            case .failed(let e): errors.append("\(city.name): \(e)")
             }
         }
         errorMessage = errors.isEmpty ? nil : "Some weather could not be updated; showing saved data where available. \(errors[0])"
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    nonisolated private static func fetchAll(targets: [(City, Coordinate)], repo: WeatherRepository) async -> [(City, WeatherRepository.Outcome)] {
+        await withTaskGroup(of: (City, WeatherRepository.Outcome).self) { group in
+            for (city, coordinate) in targets {
+                group.addTask { (city, await repo.refresh(for: coordinate, cityID: city.id)) }
+            }
+            var out: [(City, WeatherRepository.Outcome)] = []
+            for await item in group { out.append(item) }
+            return out
+        }
     }
 
     private func updateHome(_ c: Coordinate) {
