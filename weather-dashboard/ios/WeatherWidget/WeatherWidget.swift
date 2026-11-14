@@ -50,8 +50,52 @@ struct WeatherWidgetView: View {
     private var clockSize: CGFloat { family == .systemLarge ? 44 : (family == .systemMedium ? 32 : 17) }
 
     var body: some View {
+        if family == .systemMedium { mediumBody } else { stackedBody }
+    }
+
+    /// Medium: weather on the left, both clocks stacked on the right.
+    private var mediumBody: some View {
         let s = entry.snapshot
-        VStack(alignment: .leading, spacing: 0) {
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(s?.locationName ?? "LOMBARD").font(.headline.weight(.bold)).tracking(2).foregroundStyle(Theme.accent)
+                Spacer(minLength: 2)
+                if let c = s?.current {
+                    Text(c.dualText).font(.system(size: 34, weight: .bold, design: .rounded))
+                        .minimumScaleFactor(0.5).lineLimit(1).foregroundStyle(.white)
+                } else {
+                    Text(s == nil ? "Open app" : "No reading").font(.title2.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
+                }
+                Spacer(minLength: 4)
+                if let s {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("H \(s.high.fText) / \(s.high.cText)")
+                        Text("L \(s.low.fText) / \(s.low.cText)")
+                    }
+                    .font(.system(size: 17, weight: .semibold, design: .rounded)).foregroundStyle(.white)
+                    .minimumScaleFactor(0.7).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            VStack(alignment: .trailing, spacing: 6) {
+                ForEach(CityClock.all) { clock in
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(clock.name).font(.subheadline).foregroundStyle(Theme.secondary)
+                        Text(clock.string(at: entry.date))
+                            .font(.system(size: 28, weight: .bold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(.white).minimumScaleFactor(0.6).lineLimit(1)
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .containerBackground(Theme.background, for: .widget)
+    }
+
+    private var stackedBody: some View {
+        let s = entry.snapshot
+        return VStack(alignment: .leading, spacing: 0) {
             Text(s?.locationName ?? "LOMBARD")
                 .font(family == .systemSmall ? .footnote.weight(.bold) : .headline.weight(.bold))
                 .tracking(2).foregroundStyle(Theme.accent)
