@@ -40,10 +40,12 @@ struct WeatherProvider: TimelineProvider {
             // Fetch only cities whose cache is older than 15 minutes (NOAA stations report about hourly).
             let snapshots = await WeatherRefresher.refresh(cities: cities, cache: cache, maxAge: 15 * 60)
             let rows = cities.map { CityEntry(city: $0, snapshot: snapshots[$0.id]) }
-            // Clocks are live (system-rendered), so one entry is enough.
-            // Ask iOS to reload in ~20 minutes; it may choose a different time within its budget.
-            let entry = WeatherEntry(date: .now, rows: rows)
-            completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(20 * 60))))
+            // The system shows each entry at its date, so one entry per minute keeps the clocks correct
+            // without any reload. Three hours of entries ride through delayed weather reloads.
+            // Weather is requested again in ~20 minutes; iOS decides the actual time.
+            let start = Calendar.current.dateInterval(of: .minute, for: .now)?.start ?? .now
+            let entries = (0..<180).map { WeatherEntry(date: start.addingTimeInterval(Double($0) * 60), rows: rows) }
+            completion(Timeline(entries: entries, policy: .after(.now.addingTimeInterval(20 * 60))))
         }
     }
 
