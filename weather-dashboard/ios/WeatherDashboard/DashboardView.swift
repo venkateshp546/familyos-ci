@@ -78,7 +78,7 @@ struct DashboardView: View {
     }
 }
 
-/// Three columns: name | live time | temperature with high/low.
+/// Four columns: name | live time | temperature | high/low.
 struct CityRow: View {
     let name: String
     let clock: CityClock
@@ -86,37 +86,38 @@ struct CityRow: View {
     let isHome: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 6) {
             Text(name).font(.headline).foregroundStyle(isHome ? Theme.accent : .white)
                 .lineLimit(2).minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .center, spacing: 0) {
+            VStack(spacing: 0) {
                 // Ticks each second while the app is active; SwiftUI pauses it in the background.
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
                     Text(clock.string(at: ctx.date, seconds: true))
-                        .font(.system(size: 19, weight: .semibold, design: .rounded).monospacedDigit()).foregroundStyle(.white)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit()).foregroundStyle(.white)
+                        .minimumScaleFactor(0.7).lineLimit(1)
                 }
                 TimelineView(.periodic(from: .now, by: 60)) { ctx in
                     Text(clock.abbreviation(at: ctx.date)).font(.caption2).foregroundStyle(Theme.secondary)
                 }
             }
-            .frame(width: 112)
-            VStack(alignment: .trailing, spacing: 2) {
-                Group {
-                    if let c = snapshot?.current {
-                        Text(c.dualText + (snapshot?.source == .openMeteo ? "*" : ""))
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                    } else {
-                        Text(snapshot == nil ? "…" : "No reading").font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
-                    }
-                }
-                .foregroundStyle(.white).minimumScaleFactor(0.6).lineLimit(1)
-                if let s = snapshot {
-                    Text("H \(s.high.pairText)  L \(s.low.pairText)").font(.caption).foregroundStyle(Theme.secondary)
-                        .minimumScaleFactor(0.7).lineLimit(1)
+            .frame(width: 84)
+            Group {
+                if let c = snapshot?.current {
+                    Text(c.dualText + (snapshot?.source == .openMeteo ? "*" : ""))
+                } else {
+                    Text(snapshot == nil ? "…" : "No reading").foregroundStyle(.white.opacity(0.7))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .font(.system(size: 15, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            .minimumScaleFactor(0.5).lineLimit(1)
+            .frame(width: 96, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("H \(snapshot?.high.pairText ?? "—")")
+                Text("L \(snapshot?.low.pairText ?? "—")")
+            }
+            .font(.caption).foregroundStyle(Theme.secondary).minimumScaleFactor(0.7).lineLimit(1)
+            .frame(width: 58, alignment: .trailing)
         }
         .padding(.vertical, 14)
     }

@@ -79,7 +79,7 @@ struct WeatherProvider: TimelineProvider {
     }()
 }
 
-/// Three columns per row: name | time | temperature with high/low.
+/// Per row: name | time | temperature | high/low.
 struct WeatherWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WeatherEntry
@@ -121,27 +121,28 @@ struct WeatherWidgetView: View {
                     .minimumScaleFactor(0.7).lineLimit(1)
             }
         } else {
-            HStack(spacing: 6) {
+            // Four columns: name | time | temperature | high/low.
+            HStack(spacing: 4) {
                 Text(row.displayName)
                     .font(large ? .title3.weight(.bold) : .subheadline.weight(.bold))
                     .foregroundStyle(row.city.isHome ? Theme.accent : .white)
                     .lineLimit(1).minimumScaleFactor(0.6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(row.city.clock.string(at: entry.date))
-                    .font(.system(size: large ? 24 : 18, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(width: large ? 110 : 84)
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text((s?.current?.dualText ?? "—") + star)
-                        .font(.system(size: large ? 22 : 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    if let s {
-                        Text("H \(s.high.pairText)  L \(s.low.pairText)")
-                            .font(large ? .footnote : .caption2).foregroundStyle(Theme.secondary)
-                            .lineLimit(1).minimumScaleFactor(0.6)
-                    }
+                    .font(.system(size: large ? 22 : 15, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(width: large ? 96 : 66, alignment: .center)
+                Text((s?.current?.dualText ?? "—") + star)
+                    .font(.system(size: large ? 20 : 14, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .frame(width: large ? 118 : 88, alignment: .trailing)
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("H \(s?.high.pairText ?? "—")")
+                    Text("L \(s?.low.pairText ?? "—")")
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .font(large ? .footnote : .caption2).foregroundStyle(Theme.secondary)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .frame(width: large ? 72 : 54, alignment: .trailing)
             }
         }
     }
