@@ -37,7 +37,7 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         guard let loc = locations.last else { return }
         Task { @MainActor in
             self.failure = nil
-            self.coordinate = Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: nil)
+            self.coordinate = Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: nil, timeZoneID: TimeZone.current.identifier)
         }
     }
 
@@ -50,7 +50,8 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     static func geocode(_ text: String) async throws -> Coordinate {
         let marks = try await CLGeocoder().geocodeAddressString(text)
         guard let m = marks.first, let loc = m.location else { throw WeatherError.badResponse }
-        let name = (m.locality ?? m.name ?? text).uppercased()
-        return Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: name)
+        let name = m.locality ?? m.name ?? text
+        return Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: name,
+                          timeZoneID: m.timeZone?.identifier ?? TimeZone.current.identifier)
     }
 }
