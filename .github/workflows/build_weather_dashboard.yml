@@ -48,6 +48,7 @@ jobs:
           c=[x for k,v in d.items() if "iOS" in k for x in v if x["name"].startswith("iPhone")]
           print(c[-1]["udid"])')
           echo "Simulator: $UDID"
+          mkdir -p build
           set -o pipefail
           xcodebuild test \
             -project WeatherDashboard.xcodeproj \
