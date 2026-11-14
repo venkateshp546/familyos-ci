@@ -121,3 +121,38 @@ final class NOAATests: XCTestCase {
         catch { XCTAssertTrue(error is WeatherError) }
     }
 }
+
+final class WeatherKitOrderTests: XCTestCase {
+    private func snapshot(_ source: WeatherSource) -> WeatherSnapshot {
+        WeatherSnapshot(locationName: "X", latitude: 0, longitude: 0, source: source, stationID: nil, stationName: nil,
+                        current: Temperature(celsius: 5), observedAt: Fixtures.now, high: nil, low: nil,
+                        fetchedAt: Fixtures.now, observationNote: nil)
+    }
+
+    func testWeatherKitUsedFirstWhenItWorks() async throws {
+        let client = MockClient(); client.failAll = true
+        var svc = Fixtures.service(client)
+        svc.weatherKitFetch = { _ in self.snapshot(.weatherKit) }
+        let s = try await svc.fetch(for: Fixtures.coordinate)
+        XCTAssertEqual(s.source, .weatherKit)
+        XCTAssertEqual(s.source.label, "Apple WeatherKit")
+        XCTAssertTrue(client.requested.isEmpty)
+    }
+
+    func testWeatherKitFailureFallsBackToNOAA() async throws {
+        let client = Fixtures.client(observationNear: Fixtures.observation(temp: "12.5", time: "2026-11-14T17:50:00Z"))
+        var svc = Fixtures.service(client)
+        svc.weatherKitFetch = { _ in throw WeatherError.network("entitlement missing") }
+        let s = try await svc.fetch(for: Fixtures.coordinate)
+        XCTAssertEqual(s.source, .noaa)
+    }
+
+    func testRetryBackoffStoredInCache() {
+        let name = "test.\(UUID().uuidString)"
+        let cache = WeatherCache(defaults: UserDefaults(suiteName: name)!)
+        XCTAssertTrue(cache.weatherKitEnabled)
+        XCTAssertLessThan(cache.weatherKitRetryAfter, Fixtures.now)
+        cache.weatherKitRetryAfter = Fixtures.now.addingTimeInterval(100)
+        XCTAssertEqual(cache.weatherKitRetryAfter.timeIntervalSince1970, Fixtures.now.timeIntervalSince1970 + 100, accuracy: 0.001)
+    }
+}

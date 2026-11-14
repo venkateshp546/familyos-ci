@@ -13,6 +13,7 @@ final class DashboardModel: ObservableObject {
     @Published var manualError: String?
     @Published var cityError: String?
     @Published var useFallback: Bool { didSet { cache.fallbackEnabled = useFallback } }
+    @Published var useWeatherKit: Bool { didSet { cache.weatherKitEnabled = useWeatherKit; if useWeatherKit { cache.weatherKitRetryAfter = .distantPast } } }
 
     let location = LocationProvider()
     private let cache = WeatherCache()
@@ -23,6 +24,7 @@ final class DashboardModel: ObservableObject {
     init() {
         cities = cache.loadCities()
         useFallback = cache.fallbackEnabled
+        useWeatherKit = cache.weatherKitEnabled
         for c in cities { snapshots[c.id] = cache.load(cityID: c.id) }
         location.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         if let data = UserDefaults.standard.data(forKey: Self.manualKey) {
@@ -55,6 +57,7 @@ final class DashboardModel: ObservableObject {
 
         var service = WeatherService()
         service.allowOpenMeteoFallback = useFallback
+        service.weatherKitFetch = WeatherKitProvider.fetcher(cache: cache)
         let repo = WeatherRepository(service: service, cache: cache)
         var errors: [String] = []
         let targets = cities.map { ($0, $0.isHome ? home : $0.coordinate) }

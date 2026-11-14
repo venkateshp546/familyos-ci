@@ -3,11 +3,13 @@ import Foundation
 enum WeatherSource: String, Codable {
     case noaa
     case openMeteo
+    case weatherKit
 
     var label: String {
         switch self {
         case .noaa: return "NOAA"
         case .openMeteo: return "Open-Meteo (fallback)"
+        case .weatherKit: return "Apple WeatherKit"
         }
     }
 }
