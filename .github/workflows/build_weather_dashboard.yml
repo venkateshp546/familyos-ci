@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # needed only to publish the IPA as a release/tag
 
 jobs:
   build:
@@ -109,6 +109,19 @@ jobs:
           name: WeatherDashboard-unsigned-IPA
           path: weather-dashboard/build/WeatherDashboard-unsigned.ipa
           retention-days: 14
+
+      - name: Publish IPA as tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="weather-dashboard-build-${{ github.run_number }}"
+          cp build/WeatherDashboard-unsigned.ipa "build/WeatherDashboard-${TAG##*-}-unsigned.ipa"
+          gh release create "$TAG" \
+            "build/WeatherDashboard-${TAG##*-}-unsigned.ipa" \
+            --target "${{ github.sha }}" \
+            --title "Weather Dashboard build ${{ github.run_number }} (unsigned)" \
+            --notes "Unsigned device IPA. Sign with Signulous before installing. Commit ${{ github.sha }}." \
+            --prerelease
 
       - name: Upload test logs
         if: always()
