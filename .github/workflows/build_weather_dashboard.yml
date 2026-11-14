@@ -110,17 +110,17 @@ jobs:
           path: weather-dashboard/build/WeatherDashboard-unsigned.ipa
           retention-days: 14
 
-      - name: Publish IPA as tagged release
+      - name: Publish IPA to the single "weather-dashboard-latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="weather-dashboard-build-${{ github.run_number }}"
-          cp build/WeatherDashboard-unsigned.ipa "build/WeatherDashboard-${TAG##*-}-unsigned.ipa"
-          gh release create "$TAG" \
-            "build/WeatherDashboard-${TAG##*-}-unsigned.ipa" \
+          TAG="weather-dashboard-latest"
+          # Replace the previous release and tag so there is always exactly one.
+          gh release delete "$TAG" --cleanup-tag --yes || true
+          gh release create "$TAG" build/WeatherDashboard-unsigned.ipa \
             --target "${{ github.sha }}" \
-            --title "Weather Dashboard build ${{ github.run_number }} (unsigned)" \
-            --notes "Unsigned device IPA. Sign with Signulous before installing. Commit ${{ github.sha }}." \
+            --title "Weather Dashboard (latest, unsigned)" \
+            --notes "Unsigned device IPA from run ${{ github.run_number }}, commit ${{ github.sha }}. Sign with Signulous before installing." \
             --prerelease
 
       - name: Upload test logs
