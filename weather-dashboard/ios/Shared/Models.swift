@@ -45,9 +45,10 @@ struct Coordinate: Codable, Equatable {
     var latitude: Double
     var longitude: Double
     var name: String?
+    var timeZoneID: String? = nil
 
     /// Fallback when no location is available.
-    static let lombard = Coordinate(latitude: 41.88, longitude: -88.02, name: "LOMBARD")
+    static let lombard = Coordinate(latitude: 41.88, longitude: -88.02, name: "LOMBARD", timeZoneID: "America/Chicago")
 }
 
 enum WeatherError: Error, Equatable, LocalizedError {

@@ -8,18 +8,29 @@ struct DashboardView: View {
         ZStack {
             Theme.background.ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 16) {
                     header
-                    weatherBlock
                     if let msg = model.location.access.message, model.manualLocation == nil {
                         banner(msg, color: .orange)
                     }
                     if let err = model.errorMessage { banner(err, color: .red) }
-                    Divider().overlay(.white.opacity(0.2))
-                    ForEach(CityClock.all) { ClockRow(clock: $0) }
-                    footer
+                    VStack(spacing: 0) {
+                        ForEach(model.cities) { city in
+                            CityRow(name: model.displayName(city), clock: city.clock,
+                                    snapshot: model.snapshots[city.id], isHome: city.isHome)
+                            Divider().overlay(.white.opacity(0.15))
+                        }
+                    }
+                    if model.isLoading && model.snapshots.isEmpty {
+                        ProgressView("Loading weather…").tint(.white).foregroundStyle(Theme.secondary)
+                    }
+                    sources
+                    Button { Task { await model.refresh() } } label: {
+                        Label("Refresh weather", systemImage: "arrow.clockwise").font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered).tint(Theme.accent).disabled(model.isLoading)
                 }
-                .padding(24)
+                .padding(20)
             }
             .refreshable { await model.refresh() }
         }
@@ -30,52 +41,34 @@ struct DashboardView: View {
 
     private var header: some View {
         HStack {
-            Text(model.snapshot?.locationName ?? model.effectiveCoordinate.name ?? "LOMBARD")
-                .font(.headline).tracking(2).foregroundStyle(Theme.accent)
+            Text("WEATHER").font(.headline).tracking(2).foregroundStyle(Theme.accent)
             Spacer()
             if model.isLoading { ProgressView().tint(.white) }
-            Button { showSettings = true } label: { Image(systemName: "location.circle") }
-                .tint(Theme.accent).accessibilityLabel("Location settings")
+            Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3") }
+                .tint(Theme.accent).accessibilityLabel("Settings")
         }
     }
 
-    @ViewBuilder private var weatherBlock: some View {
-        if let s = model.snapshot {
-            if let c = s.current {
-                Text(c.dualText)
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.6).lineLimit(1).foregroundStyle(.white)
-            } else {
-                Text("No current reading").font(.title2.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
-                if let n = s.observationNote { Text(n).font(.footnote).foregroundStyle(Theme.secondary) }
+    /// Data provenance per city; Open-Meteo is always called out.
+    private var sources: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { ctx in
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(model.cities) { city in
+                    if let s = model.snapshots[city.id] {
+                        Text("\(model.displayName(city)): \(sourceLine(s, now: ctx.date))")
+                    }
+                }
             }
-            HStack {
-                Text("HIGH \(s.high.fText) / \(s.high.cText)")
-                Spacer()
-                Text("LOW \(s.low.fText) / \(s.low.cText)")
-            }.font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-            TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                Text(sourceLine(s, now: ctx.date)).font(.caption).foregroundStyle(Theme.secondary)
-            }
-        } else if model.isLoading {
-            ProgressView("Loading weather…").tint(.white).foregroundStyle(Theme.secondary)
-        } else {
-            Text("No weather yet").foregroundStyle(Theme.secondary)
+            .font(.caption).foregroundStyle(Theme.secondary)
         }
     }
 
     private func sourceLine(_ s: WeatherSnapshot, now: Date) -> String {
         var parts = [s.source.label]
-        if let id = s.stationID { parts.append("Station \(id)") }
+        if let id = s.stationID { parts.append("station \(id)") }
         if let age = s.observationAge(now: now) { parts.append("observed \(age)") }
+        else if let n = s.observationNote { parts.append(n) }
         return parts.joined(separator: " · ")
-    }
-
-    private var footer: some View {
-        Button { Task { await model.refresh() } } label: {
-            Label("Refresh weather", systemImage: "arrow.clockwise").font(.subheadline.weight(.semibold))
-        }
-        .buttonStyle(.bordered).tint(Theme.accent).disabled(model.isLoading)
     }
 
     private func banner(_ text: String, color: Color) -> some View {
@@ -85,23 +78,48 @@ struct DashboardView: View {
     }
 }
 
-struct ClockRow: View {
+/// Four columns: name | live time | temperature | high/low.
+struct CityRow: View {
+    let name: String
     let clock: CityClock
+    let snapshot: WeatherSnapshot?
+    let isHome: Bool
+
     var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(clock.name).font(.title3.weight(.semibold)).foregroundStyle(.white)
+        HStack(alignment: .center, spacing: 6) {
+            Text(name).font(.headline).foregroundStyle(isHome ? Theme.accent : .white)
+                .lineLimit(2).minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 0) {
+                // Ticks each second while the app is active; SwiftUI pauses it in the background.
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    Text(clock.string(at: ctx.date, seconds: true))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded).monospacedDigit()).foregroundStyle(.white)
+                        .minimumScaleFactor(0.7).lineLimit(1)
+                }
                 TimelineView(.periodic(from: .now, by: 60)) { ctx in
-                    Text(clock.abbreviation(at: ctx.date)).font(.caption).foregroundStyle(Theme.secondary)
+                    Text(clock.abbreviation(at: ctx.date)).font(.caption2).foregroundStyle(Theme.secondary)
                 }
             }
-            Spacer()
-            // Ticks each second while the app is active; SwiftUI pauses it in the background.
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                Text(clock.string(at: ctx.date, seconds: true))
-                    .font(.title2.monospacedDigit().weight(.semibold)).foregroundStyle(.white)
+            .frame(width: 84)
+            Group {
+                if let c = snapshot?.current {
+                    Text(c.dualText + (snapshot?.source == .openMeteo ? "*" : ""))
+                } else {
+                    Text(snapshot == nil ? "…" : "No reading").foregroundStyle(.white.opacity(0.7))
+                }
             }
+            .font(.system(size: 15, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            .minimumScaleFactor(0.5).lineLimit(1)
+            .frame(width: 96, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("H \(snapshot?.high.pairText ?? "—")")
+                Text("L \(snapshot?.low.pairText ?? "—")")
+            }
+            .font(.caption).foregroundStyle(Theme.secondary).minimumScaleFactor(0.7).lineLimit(1)
+            .frame(width: 58, alignment: .trailing)
         }
+        .padding(.vertical, 14)
     }
 }
 
@@ -109,11 +127,30 @@ struct SettingsSheet: View {
     @ObservedObject var model: DashboardModel
     @Environment(\.dismiss) private var dismiss
     @State private var place = ""
+    @State private var newCity = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Location") {
+                Section {
+                    ForEach(model.cities) { c in
+                        HStack {
+                            Text(model.displayName(c))
+                            Spacer()
+                            Text(c.isHome ? "Home" : c.zoneID).font(.caption).foregroundStyle(.secondary)
+                        }
+                        .deleteDisabled(c.isHome)
+                    }
+                    .onDelete { model.removeCities(at: $0) }
+                    TextField("Add city", text: $newCity).textInputAutocapitalization(.words)
+                    Button("Add city") {
+                        Task { await model.addCity(newCity); if model.cityError == nil { newCity = "" } }
+                    }
+                    .disabled(newCity.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if let e = model.cityError { Text(e).foregroundStyle(.red) }
+                } header: { Text("Cities") } footer: { Text("Swipe to delete. Time zone is set automatically. The widget shows the first 3 (medium) or 6 (large).") }
+
+                Section("Home location") {
                     Button("Use GPS") { model.useGPS(); dismiss() }
                     TextField("City or address", text: $place).textInputAutocapitalization(.words)
                     Button("Use this place") { Task { await model.setManual(place); if model.manualError == nil { dismiss() } } }
@@ -124,7 +161,7 @@ struct SettingsSheet: View {
                 Section {
                     Toggle("Open-Meteo fallback", isOn: $model.useFallback)
                 } footer: {
-                    Text("When NOAA is unreachable or does not cover the location, Open-Meteo may supply data. It is always labeled.")
+                    Text("NOAA covers the US only. Elsewhere, or when NOAA is unreachable, Open-Meteo supplies data, marked with * and labeled.")
                 }
             }
             .navigationTitle("Settings")

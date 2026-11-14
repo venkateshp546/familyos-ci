@@ -1,120 +1,148 @@
 import SwiftUI
 import WidgetKit
 
+struct CityEntry: Identifiable {
+    let city: City
+    let snapshot: WeatherSnapshot?
+    var id: String { city.id }
+    var displayName: String { city.isHome ? (snapshot?.locationName ?? city.name) : city.name }
+}
+
 struct WeatherEntry: TimelineEntry {
     let date: Date
-    let snapshot: WeatherSnapshot?
+    let rows: [CityEntry]
+}
+
+extension WidgetFamily {
+    /// How many cities fit.
+    var rowCount: Int { self == .systemLarge ? 6 : 3 }
 }
 
 struct WeatherProvider: TimelineProvider {
     func placeholder(in context: Context) -> WeatherEntry {
-        WeatherEntry(date: .now, snapshot: Self.sample)
+        WeatherEntry(date: .now, rows: Self.sampleRows)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WeatherEntry) -> Void) {
-        let cached = WeatherCache().load()
-        completion(WeatherEntry(date: .now, snapshot: cached ?? (context.isPreview ? Self.sample : nil)))
+        let cache = WeatherCache()
+        let rows = cache.loadCities().prefix(context.family.rowCount).map { CityEntry(city: $0, snapshot: cache.load(cityID: $0.id)) }
+        let hasData = rows.contains { $0.snapshot != nil }
+        completion(WeatherEntry(date: .now, rows: (context.isPreview && !hasData) ? Self.sampleRows : Array(rows)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
+        let family = context.family
         Task {
             let cache = WeatherCache()
-            var snapshot = cache.load()
-            // Refresh only when cached data is older than 20 minutes; iOS decides actual reload timing.
-            if snapshot == nil || Date().timeIntervalSince(snapshot!.fetchedAt) > 20 * 60 {
-                let coordinate = cache.loadLocation() ?? .lombard
-                if case .fresh(let s) = await WeatherRepository(service: WeatherService(), cache: cache).refresh(for: coordinate) {
-                    snapshot = s
+            let cities = Array(cache.loadCities().prefix(family.rowCount))
+            var service = WeatherService()
+            service.allowOpenMeteoFallback = cache.fallbackEnabled
+            let repo = WeatherRepository(service: service, cache: cache)
+
+            // Refresh only cities whose cache is older than 20 minutes; iOS decides actual reload timing.
+            var snapshots: [String: WeatherSnapshot] = [:]
+            await withTaskGroup(of: (String, WeatherSnapshot?).self) { group in
+                for city in cities {
+                    group.addTask {
+                        let cached = cache.load(cityID: city.id)
+                        if let cached, Date().timeIntervalSince(cached.fetchedAt) <= 20 * 60 { return (city.id, cached) }
+                        switch await repo.refresh(for: city.coordinate, cityID: city.id) {
+                        case .fresh(let s): return (city.id, s)
+                        case .cached(let s, _): return (city.id, s)
+                        case .failed: return (city.id, nil)
+                        }
+                    }
                 }
+                for await (id, s) in group { snapshots[id] = s }
             }
+            let rows = cities.map { CityEntry(city: $0, snapshot: snapshots[$0.id] ?? nil) }
             // One entry per minute for an hour keeps the clocks current without background work.
-            // Weather itself is requested again after ~30 minutes; iOS may delay this.
+            // Weather is requested again after ~30 minutes; iOS may delay this.
             let start = Calendar.current.date(bySetting: .second, value: 0, of: .now) ?? .now
-            let entries = (0..<60).map { WeatherEntry(date: start.addingTimeInterval(Double($0) * 60), snapshot: snapshot) }
+            let entries = (0..<60).map { WeatherEntry(date: start.addingTimeInterval(Double($0) * 60), rows: rows) }
             completion(Timeline(entries: entries, policy: .after(start.addingTimeInterval(30 * 60))))
         }
     }
 
-    static let sample = WeatherSnapshot(
-        locationName: "LOMBARD", latitude: 41.88, longitude: -88.02, source: .noaa,
-        stationID: "KDPA", stationName: "DuPage", current: Temperature(fahrenheit: 54),
-        observedAt: .now, high: Temperature(fahrenheit: 58), low: Temperature(fahrenheit: 41),
-        fetchedAt: .now, observationNote: nil)
+    static let sampleRows: [CityEntry] = {
+        let now = Date()
+        func snap(_ name: String, _ f: Double, _ h: Double, _ l: Double) -> WeatherSnapshot {
+            WeatherSnapshot(locationName: name, latitude: 0, longitude: 0, source: .noaa, stationID: nil, stationName: nil,
+                            current: Temperature(fahrenheit: f), observedAt: now, high: Temperature(fahrenheit: h),
+                            low: Temperature(fahrenheit: l), fetchedAt: now, observationNote: nil)
+        }
+        return [
+            CityEntry(city: City.defaults[0], snapshot: snap("LOMBARD", 54, 58, 41)),
+            CityEntry(city: City.defaults[1], snapshot: snap("Guntur", 88, 93, 77)),
+            CityEntry(city: City.defaults[2], snapshot: snap("London", 50, 53, 44)),
+        ]
+    }()
 }
 
+/// Per row: name | time | temperature | high/low.
 struct WeatherWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: WeatherEntry
 
-    private var tempSize: CGFloat { family == .systemLarge ? 64 : (family == .systemMedium ? 50 : 36) }
-    private var clockSize: CGFloat { family == .systemLarge ? 44 : (family == .systemMedium ? 32 : 17) }
+    private var large: Bool { family == .systemLarge }
+    private var small: Bool { family == .systemSmall }
 
     var body: some View {
-        let s = entry.snapshot
-        VStack(alignment: .leading, spacing: 0) {
-            Text(s?.locationName ?? "LOMBARD")
-                .font(family == .systemSmall ? .footnote.weight(.bold) : .headline.weight(.bold))
-                .tracking(2).foregroundStyle(Theme.accent)
-            Spacer(minLength: 2)
-            temperature(s)
-            Spacer(minLength: 2)
-            highLow(s)
-            Spacer(minLength: 2)
-            clocks
-            if family == .systemLarge, let s {
-                Spacer(minLength: 4)
-                Text([s.source.label, s.stationID.map { "Station \($0)" }].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(Theme.secondary)
+        VStack(spacing: 0) {
+            if entry.rows.isEmpty {
+                Text("Open app").font(.headline).foregroundStyle(.white.opacity(0.8))
+            }
+            ForEach(Array(entry.rows.enumerated()), id: \.element.id) { index, row in
+                if index > 0 { Divider().overlay(.white.opacity(0.15)) }
+                rowView(row).frame(maxHeight: .infinity)
+            }
+            if large, entry.rows.contains(where: { $0.snapshot?.source == .openMeteo }) {
+                Text("* Open-Meteo (fallback). Others: NOAA.").font(.caption2).foregroundStyle(Theme.secondary)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(Theme.background, for: .widget)
     }
 
-    @ViewBuilder private func temperature(_ s: WeatherSnapshot?) -> some View {
-        if let c = s?.current {
-            if family == .systemSmall {
+    @ViewBuilder private func rowView(_ row: CityEntry) -> some View {
+        let s = row.snapshot
+        let star = s?.source == .openMeteo ? "*" : ""
+        if small {
+            HStack {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(c.fahrenheitRounded)°F").font(.system(size: tempSize, weight: .bold, design: .rounded))
-                    Text("\(c.celsiusRounded)°C").font(.system(size: 22, weight: .semibold, design: .rounded)).foregroundStyle(.white.opacity(0.8))
-                }.foregroundStyle(.white).minimumScaleFactor(0.6).lineLimit(1)
-            } else {
-                Text(c.dualText).font(.system(size: tempSize, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.5).lineLimit(1).foregroundStyle(.white)
+                    Text(row.displayName).font(.caption.weight(.bold)).foregroundStyle(row.city.isHome ? Theme.accent : Theme.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    Text((s?.current.map { "\($0.fahrenheitRounded)°F" } ?? "—") + star)
+                        .font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                }
+                Spacer(minLength: 2)
+                Text(row.city.clock.string(at: entry.date))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit()).foregroundStyle(.white)
+                    .minimumScaleFactor(0.7).lineLimit(1)
             }
         } else {
-            Text(s == nil ? "Open app" : "No reading").font(.title2.weight(.semibold)).foregroundStyle(.white.opacity(0.8))
-        }
-    }
-
-    @ViewBuilder private func highLow(_ s: WeatherSnapshot?) -> some View {
-        if let s {
-            if family == .systemSmall {
-                Text("H \(s.high.fText)  L \(s.low.fText)").font(.footnote.weight(.semibold)).foregroundStyle(.white)
-                    .minimumScaleFactor(0.7).lineLimit(1)
-            } else {
-                HStack {
-                    Text("H \(s.high.fText) / \(s.high.cText)")
-                    Spacer()
-                    Text("L \(s.low.fText) / \(s.low.cText)")
+            // Four columns: name | time | temperature | high/low.
+            HStack(spacing: 4) {
+                Text(row.displayName)
+                    .font(large ? .title3.weight(.bold) : .subheadline.weight(.bold))
+                    .foregroundStyle(row.city.isHome ? Theme.accent : .white)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(row.city.clock.string(at: entry.date))
+                    .font(.system(size: large ? 22 : 15, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(width: large ? 96 : 66, alignment: .center)
+                Text((s?.current?.dualText ?? "—") + star)
+                    .font(.system(size: large ? 20 : 14, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .frame(width: large ? 118 : 88, alignment: .trailing)
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("H \(s?.high.pairText ?? "—")")
+                    Text("L \(s?.low.pairText ?? "—")")
                 }
-                .font(family == .systemLarge ? .title3.weight(.semibold) : .headline.weight(.semibold))
-                .foregroundStyle(.white).minimumScaleFactor(0.7).lineLimit(1)
-            }
-        }
-    }
-
-    private var clocks: some View {
-        HStack(alignment: .bottom) {
-            ForEach(Array(CityClock.all.enumerated()), id: \.element.id) { index, clock in
-                VStack(alignment: index == 0 ? .leading : .trailing, spacing: 0) {
-                    Text(family == .systemSmall ? clock.name.prefix(3).uppercased() : clock.name)
-                        .font(family == .systemSmall ? .caption2 : .subheadline).foregroundStyle(Theme.secondary)
-                    Text(clock.string(at: entry.date))
-                        .font(.system(size: clockSize, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.white).minimumScaleFactor(0.6).lineLimit(1)
-                }
-                if index == 0 { Spacer(minLength: 4) }
+                .font(large ? .footnote : .caption2).foregroundStyle(Theme.secondary)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .frame(width: large ? 72 : 54, alignment: .trailing)
             }
         }
     }
@@ -126,7 +154,7 @@ struct WeatherWidget: Widget {
             WeatherWidgetView(entry: entry)
         }
         .configurationDisplayName("Weather Dashboard")
-        .description("Lombard temperature, forecast, and Guntur and London times.")
+        .description("Time and weather for your cities.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

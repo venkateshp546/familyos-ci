@@ -109,3 +109,53 @@ final class CacheTests: XCTestCase {
         XCTAssertEqual(cache.load(), s)
     }
 }
+
+final class CityTests: XCTestCase {
+    private func makeCache() -> WeatherCache {
+        let name = "test.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        return WeatherCache(defaults: d)
+    }
+
+    func testDefaultsAreHomeGunturLondon() {
+        let c = makeCache().loadCities()
+        XCTAssertEqual(c.map(\.id), ["home", "guntur", "london"])
+        XCTAssertTrue(c[0].isHome)
+        XCTAssertEqual(c[1].clock.string(at: Fixtures.now), "11:30 PM")
+    }
+
+    func testCitiesRoundTripAndHomeAlwaysPresent() {
+        let cache = makeCache()
+        let tokyo = City(id: "t", name: "Tokyo", zoneID: "Asia/Tokyo", latitude: 35.68, longitude: 139.69)
+        cache.saveCities([tokyo])
+        let loaded = cache.loadCities()
+        XCTAssertEqual(loaded.map(\.id), ["home", "t"])
+        XCTAssertEqual(loaded[1].clock.string(at: Fixtures.now), "3:00 AM")
+    }
+
+    func testPerCitySnapshotsAreIsolated() {
+        let cache = makeCache()
+        var a = WeatherSnapshot(locationName: "A", latitude: 0, longitude: 0, source: .noaa, stationID: nil, stationName: nil,
+                                current: Temperature(celsius: 1), observedAt: nil, high: nil, low: nil, fetchedAt: Fixtures.now, observationNote: nil)
+        cache.save(a, cityID: "a")
+        a.locationName = "H"
+        cache.save(a)
+        XCTAssertEqual(cache.load(cityID: "a")?.locationName, "A")
+        XCTAssertEqual(cache.load()?.locationName, "H")
+        cache.removeSnapshot(cityID: "a")
+        XCTAssertNil(cache.load(cityID: "a"))
+    }
+
+    func testFallbackSettingDefaultsOnAndPersists() {
+        let cache = makeCache()
+        XCTAssertTrue(cache.fallbackEnabled)
+        cache.fallbackEnabled = false
+        XCTAssertFalse(cache.fallbackEnabled)
+    }
+
+    func testCompactHighLowText() {
+        XCTAssertEqual(Temperature(fahrenheit: 47).pairText, "47°/8°")
+        XCTAssertEqual((nil as Temperature?).pairText, "—")
+    }
+}

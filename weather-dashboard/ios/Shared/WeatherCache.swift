@@ -15,14 +15,41 @@ struct WeatherCache {
         self.defaults = defaults ?? UserDefaults(suiteName: AppGroup.identifier) ?? .standard
     }
 
-    func save(_ snapshot: WeatherSnapshot) {
-        if let data = try? JSONEncoder().encode(snapshot) { defaults.set(data, forKey: Self.snapshotKey) }
+    static let citiesKey = "weather.cities.v1"
+    static let fallbackKey = "useOpenMeteoFallback"
+
+    /// The home city keeps the original key so older caches stay readable.
+    private func key(_ cityID: String) -> String {
+        cityID == City.homeID ? Self.snapshotKey : "\(Self.snapshotKey).\(cityID)"
+    }
+
+    func save(_ snapshot: WeatherSnapshot, cityID: String = City.homeID) {
+        if let data = try? JSONEncoder().encode(snapshot) { defaults.set(data, forKey: key(cityID)) }
     }
 
     /// Returns nil for missing or corrupt data.
-    func load() -> WeatherSnapshot? {
-        guard let data = defaults.data(forKey: Self.snapshotKey) else { return nil }
+    func load(cityID: String = City.homeID) -> WeatherSnapshot? {
+        guard let data = defaults.data(forKey: key(cityID)) else { return nil }
         return try? JSONDecoder().decode(WeatherSnapshot.self, from: data)
+    }
+
+    func removeSnapshot(cityID: String) { defaults.removeObject(forKey: key(cityID)) }
+
+    func saveCities(_ cities: [City]) {
+        if let data = try? JSONEncoder().encode(cities) { defaults.set(data, forKey: Self.citiesKey) }
+    }
+
+    /// Defaults when nothing (or corrupt data) is stored. Always contains a home city.
+    func loadCities() -> [City] {
+        guard let data = defaults.data(forKey: Self.citiesKey),
+              var list = try? JSONDecoder().decode([City].self, from: data), !list.isEmpty else { return City.defaults }
+        if !list.contains(where: { $0.isHome }) { list.insert(City.defaults[0], at: 0) }
+        return list
+    }
+
+    var fallbackEnabled: Bool {
+        get { defaults.object(forKey: Self.fallbackKey) as? Bool ?? true }
+        nonmutating set { defaults.set(newValue, forKey: Self.fallbackKey) }
     }
 
     func saveLocation(_ c: Coordinate) {
@@ -37,6 +64,7 @@ struct WeatherCache {
     func clear() {
         defaults.removeObject(forKey: Self.snapshotKey)
         defaults.removeObject(forKey: Self.locationKey)
+        defaults.removeObject(forKey: Self.citiesKey)
     }
 }
 
@@ -52,14 +80,14 @@ struct WeatherRepository {
         case failed(String)
     }
 
-    func refresh(for coordinate: Coordinate) async -> Outcome {
+    func refresh(for coordinate: Coordinate, cityID: String = City.homeID) async -> Outcome {
         do {
             let snapshot = try await service.fetch(for: coordinate)
-            cache.save(snapshot)
+            cache.save(snapshot, cityID: cityID)
             return .fresh(snapshot)
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            if let cached = cache.load() { return .cached(cached, error: message) }
+            if let cached = cache.load(cityID: cityID) { return .cached(cached, error: message) }
             return .failed(message)
         }
     }

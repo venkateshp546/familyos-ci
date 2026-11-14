@@ -9,11 +9,14 @@ enum Theme {
 extension Temperature {
     /// "72°F / 22°C"
     var dualText: String { "\(fahrenheitRounded)°F / \(celsiusRounded)°C" }
+    /// "47°/8°" (F then C), compact for high/low.
+    var pairText: String { "\(fahrenheitRounded)°/\(celsiusRounded)°" }
 }
 
 extension Optional where Wrapped == Temperature {
     var fText: String { map { "\($0.fahrenheitRounded)°F" } ?? "—" }
     var cText: String { map { "\($0.celsiusRounded)°C" } ?? "—" }
+    var pairText: String { map { $0.pairText } ?? "—" }
 }
 
 extension WeatherSnapshot {
