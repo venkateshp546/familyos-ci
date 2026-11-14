@@ -213,3 +213,16 @@ final class HomeUpdateTests: XCTestCase {
         XCTAssertEqual(cities[1].latitude, 16.3067)
     }
 }
+
+final class ManualLocationTests: XCTestCase {
+    func testManualLocationSharedAndClearable() {
+        let name = "test.\(UUID().uuidString)"
+        let cache = WeatherCache(defaults: UserDefaults(suiteName: name)!)
+        XCTAssertNil(cache.manualLocation)
+        let c = Coordinate(latitude: 1, longitude: 2, name: "X", timeZoneID: "Asia/Tokyo")
+        cache.manualLocation = c
+        XCTAssertEqual(cache.manualLocation, c)
+        cache.manualLocation = nil
+        XCTAssertNil(cache.manualLocation)
+    }
+}

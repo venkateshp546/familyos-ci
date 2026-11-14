@@ -17,7 +17,7 @@ final class DashboardModel: ObservableObject {
 
     let location = LocationProvider()
     private let cache = WeatherCache()
-    private static let manualKey = "manual.location.v1"
+    private static let legacyManualKey = "manual.location.v1"
     private var started = false
     private var bag = Set<AnyCancellable>()
 
@@ -27,8 +27,11 @@ final class DashboardModel: ObservableObject {
         useWeatherKit = cache.weatherKitEnabled
         for c in cities { snapshots[c.id] = cache.load(cityID: c.id) }
         location.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
-        if let data = UserDefaults.standard.data(forKey: Self.manualKey) {
-            manualLocation = try? JSONDecoder().decode(Coordinate.self, from: data)
+        manualLocation = cache.manualLocation
+        if manualLocation == nil, let data = UserDefaults.standard.data(forKey: Self.legacyManualKey),
+           let legacy = try? JSONDecoder().decode(Coordinate.self, from: data) {
+            manualLocation = legacy
+            cache.manualLocation = legacy
         }
     }
 
@@ -96,7 +99,7 @@ final class DashboardModel: ObservableObject {
             var c = try await LocationProvider.geocode(text)
             c.name = c.name?.uppercased()
             manualLocation = c
-            UserDefaults.standard.set(try? JSONEncoder().encode(c), forKey: Self.manualKey)
+            cache.manualLocation = c
             await refresh()
         } catch {
             manualError = "Could not find that place."
@@ -105,7 +108,8 @@ final class DashboardModel: ObservableObject {
 
     func useGPS() {
         manualLocation = nil
-        UserDefaults.standard.removeObject(forKey: Self.manualKey)
+        cache.manualLocation = nil
+        UserDefaults.standard.removeObject(forKey: Self.legacyManualKey)
         location.start()
         Task { await refresh() }
     }

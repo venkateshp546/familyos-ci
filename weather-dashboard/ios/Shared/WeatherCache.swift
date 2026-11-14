@@ -76,6 +76,17 @@ struct WeatherCache {
         saveCities(cities)
     }
 
+    static let manualKey = "weather.manual.v1"
+
+    /// Manually chosen home location. Lives in the shared store so the widget respects it.
+    var manualLocation: Coordinate? {
+        get { defaults.data(forKey: Self.manualKey).flatMap { try? JSONDecoder().decode(Coordinate.self, from: $0) } }
+        nonmutating set {
+            if let v = newValue, let data = try? JSONEncoder().encode(v) { defaults.set(data, forKey: Self.manualKey) }
+            else { defaults.removeObject(forKey: Self.manualKey) }
+        }
+    }
+
     func saveLocation(_ c: Coordinate) {
         if let data = try? JSONEncoder().encode(c) { defaults.set(data, forKey: Self.locationKey) }
     }

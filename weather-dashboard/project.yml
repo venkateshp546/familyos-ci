@@ -54,6 +54,8 @@ targets:
       path: ios/WeatherWidget/Info.plist
       properties:
         CFBundleDisplayName: Weather Widget
+        NSWidgetWantsLocation: true
+        NSLocationWhenInUseUsageDescription: The widget shows weather for your current location.
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:

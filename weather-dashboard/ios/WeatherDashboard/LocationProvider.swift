@@ -20,9 +20,17 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         access = LocationAccess(status: manager.authorizationStatus, servicesEnabled: true)
         switch access {
         case .notDetermined: manager.requestWhenInUseAuthorization()
-        case .authorized: manager.requestLocation()
+        case .authorized: useSystemCachedLocation(); manager.requestLocation()
         default: break
         }
+    }
+
+    /// iOS keeps the device's last known location (refreshed by any app using location),
+    /// so we can show weather for it immediately and then refine with a fresh fix.
+    private func useSystemCachedLocation() {
+        guard coordinate == nil, let loc = manager.location, abs(loc.timestamp.timeIntervalSinceNow) < 6 * 3600 else { return }
+        coordinate = Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: nil,
+                                timeZoneID: TimeZone.current.identifier)
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -30,6 +38,7 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         Task { @MainActor in
             self.access = LocationAccess(status: status, servicesEnabled: true)
             if self.access == .authorized {
+                self.useSystemCachedLocation()
                 manager.requestLocation()
                 // Offer "Always" so the widget can follow you; iOS shows this prompt once.
                 if status == .authorizedWhenInUse { manager.requestAlwaysAuthorization() }

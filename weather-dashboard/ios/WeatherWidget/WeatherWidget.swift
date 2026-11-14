@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 import WidgetKit
 
@@ -34,6 +35,7 @@ struct WeatherProvider: TimelineProvider {
         let family = context.family
         Task {
             let cache = WeatherCache()
+            Self.refreshHomeLocation(cache)
             let cities = Array(cache.loadCities().prefix(family.rowCount))
             // Fetch only cities whose cache is older than 15 minutes (NOAA stations report about hourly).
             let snapshots = await WeatherRefresher.refresh(cities: cities, cache: cache, maxAge: 15 * 60)
@@ -43,6 +45,19 @@ struct WeatherProvider: TimelineProvider {
             let entry = WeatherEntry(date: .now, rows: rows)
             completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(20 * 60))))
         }
+    }
+
+    /// Widgets may read the system's last known location when the app has location permission
+    /// (NSWidgetWantsLocation). This follows you without "Always" or opening the app.
+    static func refreshHomeLocation(_ cache: WeatherCache) {
+        guard cache.manualLocation == nil else { return }
+        let manager = CLLocationManager()
+        guard manager.isAuthorizedForWidgetUpdates, let loc = manager.location,
+              abs(loc.timestamp.timeIntervalSinceNow) < 6 * 3600 else { return }
+        let c = Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: nil,
+                           timeZoneID: TimeZone.current.identifier)
+        cache.saveLocation(c)
+        cache.updateHome(c)
     }
 
     static let sampleRows: [CityEntry] = {

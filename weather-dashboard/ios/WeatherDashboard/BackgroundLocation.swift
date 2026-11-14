@@ -21,10 +21,10 @@ final class BackgroundLocation: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
         // A manually chosen home location always wins over GPS.
-        if UserDefaults.standard.data(forKey: "manual.location.v1") != nil { return }
+        let cache = WeatherCache()
+        if cache.manualLocation != nil { return }
         let c = Coordinate(latitude: loc.coordinate.latitude, longitude: loc.coordinate.longitude, name: nil,
                            timeZoneID: TimeZone.current.identifier)
-        let cache = WeatherCache()
         cache.saveLocation(c)
         cache.updateHome(c)
         Task {
