@@ -199,3 +199,17 @@ final class RefresherTests: XCTestCase {
         XCTAssertEqual(out["home"]?.current?.celsius, 12.5)
     }
 }
+
+final class HomeUpdateTests: XCTestCase {
+    func testUpdateHomeMovesOnlyHome() {
+        let name = "test.\(UUID().uuidString)"
+        let cache = WeatherCache(defaults: UserDefaults(suiteName: name)!)
+        cache.updateHome(Coordinate(latitude: 51.5, longitude: -0.1, name: nil, timeZoneID: "Europe/London"))
+        let cities = cache.loadCities()
+        XCTAssertEqual(cities[0].latitude, 51.5)
+        XCTAssertEqual(cities[0].zoneID, "Europe/London")
+        XCTAssertEqual(cities[0].name, "LOMBARD", "name kept when none supplied")
+        XCTAssertEqual(cities[1].id, "guntur")
+        XCTAssertEqual(cities[1].latitude, 16.3067)
+    }
+}

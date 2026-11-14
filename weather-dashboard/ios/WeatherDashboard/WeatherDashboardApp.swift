@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct WeatherDashboardApp: App {
+    init() { BackgroundLocation.shared.start() }
+
     var body: some Scene {
         WindowGroup {
             DashboardView().preferredColorScheme(.dark)

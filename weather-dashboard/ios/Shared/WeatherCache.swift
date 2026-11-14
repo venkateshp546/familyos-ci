@@ -65,6 +65,17 @@ struct WeatherCache {
         nonmutating set { defaults.set(newValue, forKey: Self.fallbackKey) }
     }
 
+    /// Moves the home city to a new coordinate (keeps its name unless one is given).
+    func updateHome(_ c: Coordinate) {
+        var cities = loadCities()
+        guard let i = cities.firstIndex(where: { $0.isHome }) else { return }
+        cities[i].latitude = c.latitude
+        cities[i].longitude = c.longitude
+        if let n = c.name { cities[i].name = n }
+        if let z = c.timeZoneID { cities[i].zoneID = z }
+        saveCities(cities)
+    }
+
     func saveLocation(_ c: Coordinate) {
         if let data = try? JSONEncoder().encode(c) { defaults.set(data, forKey: Self.locationKey) }
     }

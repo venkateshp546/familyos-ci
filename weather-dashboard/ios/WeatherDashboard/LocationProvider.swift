@@ -29,7 +29,11 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         let status = manager.authorizationStatus
         Task { @MainActor in
             self.access = LocationAccess(status: status, servicesEnabled: true)
-            if self.access == .authorized { manager.requestLocation() }
+            if self.access == .authorized {
+                manager.requestLocation()
+                // Offer "Always" so the widget can follow you; iOS shows this prompt once.
+                if status == .authorizedWhenInUse { manager.requestAlwaysAuthorization() }
+            }
         }
     }
 
