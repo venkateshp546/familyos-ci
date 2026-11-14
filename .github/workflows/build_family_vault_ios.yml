@@ -135,6 +135,8 @@ jobs:
           rm -rf build/Payload && mkdir -p build/Payload
           cp -R build/ios/iphoneos/Runner.app build/Payload/
           cd build && zip -r -q FamilyVault.ipa Payload
+          # Fingerprint of our build: proof of what we built, and the input to scripts/verify-resigned-ipa.py.
+          shasum -a 256 FamilyVault.ipa | tee FamilyVault.ipa.sha256
 
       - uses: actions/upload-artifact@v4
         with:
@@ -149,6 +151,6 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           gh release delete ios-latest -R venkateshp546/family-legacy -y --cleanup-tag || true
-          gh release create ios-latest app/build/FamilyVault.ipa -R venkateshp546/family-legacy \
+          gh release create ios-latest app/build/FamilyVault.ipa app/build/FamilyVault.ipa.sha256 -R venkateshp546/family-legacy \
             --target "${{ inputs.branch }}" --title "Family Vault iOS latest" \
-            --notes "Unsigned build of ${{ inputs.branch }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" --latest
+            --notes "Unsigned build of ${{ inputs.branch }} at $(git rev-parse HEAD) ($(date -u +'%Y-%m-%d %H:%M UTC')). SHA-256: $(cut -d' ' -f1 app/build/FamilyVault.ipa.sha256)" --latest
