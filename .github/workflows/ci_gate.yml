@@ -28,7 +28,7 @@ jobs:
           ref: ${{ inputs.branch || github.event.client_payload.branch || 'master' }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
         with:
           version: 9
 

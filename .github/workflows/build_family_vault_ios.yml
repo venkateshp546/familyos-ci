@@ -30,9 +30,13 @@ jobs:
           repository: venkateshp546/family-legacy
           ssh-key: ${{ secrets.FAMILY_LEGACY_SSH_KEY }}
           ref: ${{ inputs.branch }}
+          # Drop the deploy key after checkout, so later third-party steps cannot read it.
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Third-party actions are pinned to a commit: a moved tag or branch cannot change what runs here.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           targets: aarch64-apple-ios
 
       - name: Cache Rust build
@@ -60,7 +64,7 @@ jobs:
           L=target/aarch64-apple-ios/release/libfv_core.a
           ls -la $L; ar t $L | head -5; nm -gU $L 2>&1 | grep -E "fv_|error" | head -5
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: 3.47.7
           cache: true
@@ -138,15 +142,9 @@ jobs:
           # Fingerprint of our build: proof of what we built, and the input to scripts/verify-resigned-ipa.py.
           shasum -a 256 FamilyVault.ipa | tee FamilyVault.ipa.sha256
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FamilyVault-IPA
-          path: app/build/FamilyVault.ipa
-          retention-days: 14
-
-      # cleanup.yml deletes finished runs (and their artifacts), so keep the IPA as a private release.
+      # The IPA goes only to the private release: this repo is public, so a run artifact
+      # would let any GitHub user download it. Fails the run if the release is not made.
       - name: Publish release to private family-legacy
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |

@@ -35,7 +35,7 @@ jobs:
           ref: ${{ inputs.branch || 'master' }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
         with:
           version: 9
 
@@ -63,7 +63,7 @@ jobs:
 
 
       - name: Setup Ruby and Bundler
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
@@ -181,14 +181,7 @@ jobs:
           zip -r -q FamilyOSMobile.ipa Payload
           echo "FamilyOSMobile.ipa packaged successfully."
 
-      - name: Upload IPA Artifact
-        if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FamilyOSMobile-IPA
-          path: apps/mobile/build/FamilyOSMobile.ipa
-          retention-days: 14
-
+      # No run artifact: this repo is public. The IPA goes only to the private release below.
       - name: Publish Release to Private FamilyOS Repository
         if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
         env:

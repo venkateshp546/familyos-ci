@@ -40,12 +40,12 @@ jobs:
 
       - name: Setup Gradle
         if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           cache-read-only: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
         with:
           version: 9
 
@@ -148,7 +148,7 @@ jobs:
 
       - name: Boot emulator and smoke-test the built APK
         if: ${{ (inputs.build_android == true || inputs.build_android == 'true') && (inputs.emulator_e2e == true || inputs.emulator_e2e == 'true') }}
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
           target: google_apis
