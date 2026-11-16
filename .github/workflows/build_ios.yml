@@ -17,6 +17,9 @@ on:
           - iphoneos
           - iphonesimulator
 
+permissions:
+  contents: read
+
 jobs:
   build-ios:
     name: Build iOS (${{ inputs.branch || 'master' }})
@@ -33,6 +36,8 @@ jobs:
           repository: venkateshp546/FamilyOS
           ssh-key: ${{ secrets.PRIVATE_SSH_KEY }}
           ref: ${{ inputs.branch || 'master' }}
+          # Drop the key after checkout, so later dependency/third-party steps cannot read it.
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3

@@ -5,14 +5,19 @@ on:
     - cron: '0 */2 * * *'
   workflow_dispatch:
 
+permissions:
+  actions: write
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
       - name: Prune completed workflow runs
         env:
-          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # A token that cannot list runs must fail the job, not pass silently.
+          set -o pipefail
           gh run list -R venkateshp546/familyos-ci --limit 100 --json databaseId,status -q '.[] | select(.status=="completed") | .databaseId' | while read -r run_id; do
             echo "Pruning run $run_id"
             gh run delete "$run_id" -R venkateshp546/familyos-ci || true
