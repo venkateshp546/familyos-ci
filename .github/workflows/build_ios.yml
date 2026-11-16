@@ -61,7 +61,6 @@ jobs:
           APPLE_BUNDLE_ID=com.vtsapps.familyos
           EOF
 
-
       - name: Setup Ruby and Bundler
         uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1
         with:
@@ -129,11 +128,10 @@ jobs:
             ${{ runner.os }}-deriveddata-${{ hashFiles('apps/mobile/ios/Podfile') }}-
             ${{ runner.os }}-deriveddata-
 
-      - name: Build iOS App (${{ inputs.sdk || 'iphoneos' }})
+      - name: Build iOS App (${{ inputs.sdk }})
         working-directory: apps/mobile
         run: |
-          TARGET_SDK="${{ inputs.sdk || 'iphoneos' }}"
-          echo "Building for SDK: $TARGET_SDK"
+          TARGET_SDK="${{ inputs.sdk }}"
 
           xcodebuild build \
             -workspace ios/FamilyOSMobile.xcworkspace \
@@ -168,10 +166,9 @@ jobs:
           key: ccache-${{ runner.os }}-${{ github.run_id }}
 
       - name: Package IPA for Physical Device Sideloading
-        if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
+        if: ${{ inputs.sdk == 'iphoneos' }}
         working-directory: apps/mobile
         run: |
-          echo "Packaging FamilyOSMobile.app into FamilyOSMobile.ipa..."
           rm -rf build/Payload build/FamilyOSMobile.ipa
           mkdir -p build/Payload
           cp -R build/derivedData/Build/Products/Release-iphoneos/FamilyOSMobile.app build/Payload/
@@ -179,16 +176,14 @@ jobs:
           grep -q "cipher_version" build/Payload/FamilyOSMobile.app/FamilyOSMobile || { echo "App binary has no SQLCipher; chat DB would be plaintext"; exit 1; }
           cd build
           zip -r -q FamilyOSMobile.ipa Payload
-          echo "FamilyOSMobile.ipa packaged successfully."
 
       # No run artifact: this repo is public. The IPA goes only to the private release below.
       - name: Publish Release to Private FamilyOS Repository
-        if: ${{ (inputs.sdk || 'iphoneos') == 'iphoneos' }}
+        if: ${{ inputs.sdk == 'iphoneos' }}
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           TAG_NAME="ios-latest"
-          echo "Publishing IPA directly to private FamilyOS repository release: $TAG_NAME"
           gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y --cleanup-tag || true
           gh release create "$TAG_NAME" apps/mobile/build/FamilyOSMobile.ipa \
             -R venkateshp546/FamilyOS \
@@ -196,4 +191,3 @@ jobs:
             --title "FamilyOS iOS Latest Build" \
             --notes "Automated build of branch ${{ inputs.branch || 'claude/familyos-forensic-audit-ik0uoc' }} ($(date -u +'%Y-%m-%d %H:%M UTC'))" \
             --latest
-          echo "Artifact uploaded to private repo release successfully."

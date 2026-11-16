@@ -39,7 +39,7 @@ jobs:
           java-version: '17'
 
       - name: Setup Gradle
-        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        if: ${{ inputs.build_android }}
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           cache-read-only: false
@@ -96,7 +96,7 @@ jobs:
 
       # libfamilyos_mls.so is gitignored; without it MlsCore cannot load and chat is dead.
       - name: Cache Rust MLS build
-        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        if: ${{ inputs.build_android }}
         uses: actions/cache@v4
         with:
           path: |
@@ -105,7 +105,7 @@ jobs:
           key: ${{ runner.os }}-mls-android-${{ hashFiles('apps/mobile/mls-core/Cargo.lock', 'apps/mobile/mls-core/src/**') }}
 
       - name: Build MLS core for Android
-        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        if: ${{ inputs.build_android }}
         run: |
           rustup target add aarch64-linux-android x86_64-linux-android
           cargo install cargo-ndk --locked
@@ -113,7 +113,7 @@ jobs:
           ls -l apps/mobile/android/app/src/main/jniLibs/*/libfamilyos_mls.so
 
       - name: Android Build
-        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        if: ${{ inputs.build_android }}
         run: |
           cd apps/mobile/android
           chmod +x gradlew
@@ -140,14 +140,14 @@ jobs:
       # as a single self-contained line using `&&`/`{ ; }`, never `if`/`fi`
       # spanning multiple lines.
       - name: Enable KVM group perms for the emulator
-        if: ${{ (inputs.build_android == true || inputs.build_android == 'true') && (inputs.emulator_e2e == true || inputs.emulator_e2e == 'true') }}
+        if: ${{ inputs.build_android && inputs.emulator_e2e }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
       - name: Boot emulator and smoke-test the built APK
-        if: ${{ (inputs.build_android == true || inputs.build_android == 'true') && (inputs.emulator_e2e == true || inputs.emulator_e2e == 'true') }}
+        if: ${{ inputs.build_android && inputs.emulator_e2e }}
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
@@ -173,7 +173,7 @@ jobs:
             echo "App launched and is still running (pid $RUNNING) after 20s - smoke test passed"
 
       - name: Upload E2E smoke-test artifacts
-        if: ${{ always() && (inputs.build_android == true || inputs.build_android == 'true') && (inputs.emulator_e2e == true || inputs.emulator_e2e == 'true') }}
+        if: ${{ always() && inputs.build_android && inputs.emulator_e2e }}
         uses: actions/upload-artifact@v4
         with:
           name: android-e2e-smoke-test
@@ -181,12 +181,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Publish Android APK to Private FamilyOS Releases
-        if: ${{ inputs.build_android == true || inputs.build_android == 'true' }}
+        if: ${{ inputs.build_android }}
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           TAG_NAME="android-latest"
-          echo "Publishing APK directly to private FamilyOS repository release: $TAG_NAME"
           gh release delete "$TAG_NAME" -R venkateshp546/FamilyOS -y --cleanup-tag || true
           gh release create "$TAG_NAME" apps/mobile/android/app/build/outputs/apk/debug/*.apk \
             -R venkateshp546/FamilyOS \

@@ -14,8 +14,6 @@ jobs:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
         run: |
           gh run list -R venkateshp546/familyos-ci --limit 100 --json databaseId,status -q '.[] | select(.status=="completed") | .databaseId' | while read -r run_id; do
-            if [ -n "$run_id" ] && [ "$run_id" != "$GITHUB_RUN_ID" ]; then
-              echo "Pruning run $run_id"
-              gh run delete "$run_id" -R venkateshp546/familyos-ci || true
-            fi
+            echo "Pruning run $run_id"
+            gh run delete "$run_id" -R venkateshp546/familyos-ci || true
           done
